@@ -186,6 +186,8 @@ model Article {
   /// Pfand je Einheit in Cent (Kiste Wasser: z. B. 450)
   depositCents Int       @default(0) @map("deposit_cents")
   needsCooling Boolean   @default(false) @map("needs_cooling")
+  /// Mindestbestand (voll/vorrätig, über alle Orte). Darunter warnt die Lage. null = keine Grenze.
+  minStock     Int?      @map("min_stock")
   note         String?
   archivedAt   DateTime? @map("archived_at")
   createdAt    DateTime  @default(now()) @map("created_at")
@@ -226,6 +228,7 @@ model Movement {
   createdBy    User      @relation("MovementCreator", fields: [createdById], references: [id], onDelete: Restrict)
   voidedBy     User?     @relation("MovementVoider", fields: [voidedById], references: [id], onDelete: SetNull)
   plan         Plan?     @relation("PlanMovement")
+  attachments  MovementAttachment[]
 
   @@index([articleId, occurredAt])
   @@index([fromLocationId])
@@ -233,6 +236,23 @@ model Movement {
   @@index([occurredAt])
   @@index([batchId])
   @@map("movements")
+}
+
+/// Foto/PDF an einer Buchung (Lieferschein, Zählzettel). Bytes liegen in der Datenbank (klein, mit in der Sicherung), Typ wird an den Bytes geprüft.
+model MovementAttachment {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  movementId  String   @map("movement_id") @db.Uuid
+  mime        String
+  filename    String
+  size        Int
+  data        Bytes
+  createdById String   @map("created_by_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  movement Movement @relation(fields: [movementId], references: [id], onDelete: Cascade)
+
+  @@index([movementId])
+  @@map("movement_attachments")
 }
 
 /// Soll: was soll wann wohin (z. B. „23 Kisten Wasser aus dem Gewölbekeller ins Kühllager 1 – für das Frühstück Freitag“).

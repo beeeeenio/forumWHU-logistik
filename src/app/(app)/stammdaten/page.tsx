@@ -87,7 +87,7 @@ async function Artikel() {
                 {a.needsCooling && <span className="chip border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-300"><Snowflake className="size-3" />kühlen</span>}
               </div>
               <details className="mt-2"><summary className="inline-flex items-center gap-1 text-sm text-muted-foreground underline"><Pencil className="size-3.5" />Bearbeiten</summary>
-                <div className="mt-3 space-y-3"><ArticleForm categories={categories} values={{ id: a.id, name: a.name, aliases: a.aliases, category: a.category, unit: a.unit, returnable: a.returnable, depositCents: a.depositCents, needsCooling: a.needsCooling, note: a.note }} /><RemoveButtons kind="article" id={a.id} /></div>
+                <div className="mt-3 space-y-3"><ArticleForm categories={categories} values={{ id: a.id, name: a.name, aliases: a.aliases, category: a.category, unit: a.unit, returnable: a.returnable, depositCents: a.depositCents, needsCooling: a.needsCooling, minStock: a.minStock, note: a.note }} /><RemoveButtons kind="article" id={a.id} /></div>
               </details>
             </li>
           ))}

@@ -19,6 +19,10 @@
 
 **Inventur:** Menü → Inventur (oder „Inventur hier“ auf der Ortsseite). Raum zählen, bei jeder Zeile Zahl eintragen oder „stimmt“ tippen; unten stehen die Abweichungen als Knopf. Gebucht werden nur Differenzen, mit Notiz im Journal.
 
+**Belege:** Im Journal (und auf Orts-/Artikelseiten) bei einer Buchung „Beleg / Foto“ tippen: Lieferschein fotografieren oder PDF wählen. Antippen vergrößert, ✕ entfernt.
+
+**Mindestbestand:** Bei einem Artikel in den Stammdaten eintragen; unterschreitet der Vorrat (voll, alle Orte) die Grenze, warnt die Lage – auf Wunsch auch per Teams/Slack.
+
 **QR-Etiketten:** Mehr → QR-Etiketten → Drucken, an Türen und Regale kleben. Handy-Kamera scannen öffnet den Ort in der App (Anmeldung nötig).
 
 **Journal:** alle Buchungen filtern, **Stornieren** (mit Grund; Buchung bleibt sichtbar, zählt nicht mehr), **Als Vorlage**, Excel-Export.

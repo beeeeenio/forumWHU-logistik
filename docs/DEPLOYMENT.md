@@ -34,6 +34,13 @@ docker exec forumwhu-crm-prod-caddy-1 caddy reload --config /etc/caddy/Caddyfile
 
 **Start-Lagerorte** (optional, alternativ Knopf auf der Lage-Seite): `docker compose --env-file .env run --rm tools npx tsx --conditions=react-server scripts/seed-orte.mts`
 
+## Benachrichtigung (optional)
+In Teams (Workflows → „Webhook-Anfrage empfangen“, Nachricht in Kanal posten) oder Slack einen eingehenden Webhook anlegen, die https-Adresse als `NOTIFY_WEBHOOK_URL` und ein Geheimnis als `CRON_SECRET` in `deploy/.env` eintragen, App neu starten. Dann per cron auf dem VPS (alle 30 Minuten):
+```bash
+*/30 * * * * . /opt/logistik/app/deploy/.env; curl -fsS -X POST -H "Authorization: Bearer $CRON_SECRET" http://127.0.0.1:3200/api/cron/alerts >/dev/null
+```
+Gemeldet werden Minusbestand, Kühlware ohne Kühlung, überfällige Pläne und Unterschreitung des Mindestbestands (nur Lagedaten, keine Personen). Unveränderte Lage wird erst nach 20 Stunden erneut gemeldet, Änderungen sofort.
+
 ## Betrieb
 - **Update:** `git pull && docker compose --env-file .env up -d --build logistik-web`, bei Schemaänderungen vorher/nachher `run --rm migrate`.
 - **Sicherung:** `deploy/backup.sh` per cron (`15 3 * * *`), pg_dump, 14 Tage, optional verschlüsselt (`BACKUP_PASSPHRASE_FILE`). Wiederherstellung einmal testen, bevor man sich darauf verlässt; eine Kopie außerhalb des Servers aufbewahren.

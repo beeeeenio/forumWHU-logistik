@@ -15,6 +15,10 @@ const schema = z.object({
   MICROSOFT_CLIENT_SECRET: z.string().optional(),
   MICROSOFT_TENANT_ID: z.string().optional(),
   MICROSOFT_REDIRECT_URI: z.string().url().optional(),
+  /** Eingehender Webhook (Teams Workflows / Slack) für Warnungen. Leer = keine Benachrichtigung. */
+  NOTIFY_WEBHOOK_URL: z.string().url().refine((u) => u.startsWith("https://"), "NOTIFY_WEBHOOK_URL muss https sein").optional().or(z.literal("").transform(() => undefined)),
+  /** Geheimnis für POST /api/cron/alerts (Cron auf dem Server). Mindestens 24 Zeichen. */
+  CRON_SECRET: z.string().min(24).optional().or(z.literal("").transform(() => undefined)),
 });
 
 export type Env = z.infer<typeof schema>;

@@ -6,9 +6,10 @@ import { pathName } from "@/lib/domain/tree";
 import { fmtQty } from "@/lib/format";
 import { fmtDateTime } from "@/lib/time";
 import { cn } from "@/lib/utils";
+import { Attachments, type AttachmentInfo } from "./attachments";
 import { VoidForm } from "./void-form";
 
-export type MovementFull = Movement & { article: Article; fromLocation: Location | null; toLocation: Location | null; supplier: Supplier | null; createdBy: User; voidedBy: User | null };
+export type MovementFull = Movement & { article: Article; fromLocation: Location | null; toLocation: Location | null; supplier: Supplier | null; createdBy: User; voidedBy: User | null; attachments: AttachmentInfo[] };
 
 /** Eine Buchung als Karte (Handy) bzw. Zeile (Desktop): was, wohin, wer, wann – storniert = durchgestrichen mit Grund. */
 export function MovementRow({ m, locations, canWrite, copyHref }: { m: MovementFull; locations: Location[]; canWrite: boolean; copyHref?: string }) {
@@ -39,6 +40,7 @@ export function MovementRow({ m, locations, canWrite, copyHref }: { m: MovementF
         </div>
       </div>
       {voided && <p className="mt-2 rounded-lg bg-danger/10 p-2 text-xs text-danger">Storniert{m.voidedBy ? ` von ${m.voidedBy.displayName}` : ""}{m.voidedAt ? ` am ${fmtDateTime(m.voidedAt)}` : ""}: {m.voidReason}</p>}
+      <Attachments movementId={m.id} items={m.attachments} canWrite={canWrite && !voided} />
       {canWrite && !voided && (
         <div className="mt-3 flex flex-wrap items-start gap-2">
           <VoidForm id={m.id} />

@@ -36,7 +36,7 @@ export async function locationRemoveAction(_p: ActionResult | null, fd: FormData
 export async function articleSaveAction(_p: ActionResult | null, fd: FormData): Promise<ActionResult> {
   const user = await actionUser("write");
   if (!user) return NOT_ALLOWED;
-  const p = z.object({ id: optId, name: str(120).min(2), aliases: optStr(400), category: str(60), unit: str(40), deposit: z.string().default("0"), note: optStr(300) }).safeParse(Object.fromEntries(fd));
+  const p = z.object({ id: optId, name: str(120).min(2), aliases: optStr(400), category: str(60), unit: str(40), deposit: z.string().default("0"), minStock: z.string().default(""), note: optStr(300) }).safeParse(Object.fromEntries(fd));
   if (!p.success) return fail("Bitte einen Namen eingeben (mindestens 2 Zeichen).");
   const euros = Number(p.data.deposit.replace(",", "."));
   if (!Number.isFinite(euros)) return fail("Pfand: bitte eine Zahl eingeben (z. B. 4,50).");
@@ -48,6 +48,7 @@ export async function articleSaveAction(_p: ActionResult | null, fd: FormData): 
     returnable: bool(fd, "returnable"),
     depositCents: Math.round(euros * 100),
     needsCooling: bool(fd, "needsCooling"),
+    minStock: p.data.minStock.trim() === "" ? null : Number(p.data.minStock),
     note: p.data.note ?? null,
   });
   return r.ok ? done("Gespeichert.") : fail(r.error);

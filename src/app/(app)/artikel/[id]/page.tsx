@@ -30,6 +30,7 @@ export default async function ArtikelPage({ params }: PageProps<"/artikel/[id]">
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="h1">{article.name}</h1>
           {article.needsCooling && <span className="chip border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-300"><Snowflake className="size-3.5" />kühlpflichtig</span>}
+          {article.minStock !== null && <span className={full < article.minStock ? "chip-warn" : "chip-muted"}>Mindestbestand {article.minStock}</span>}
           {article.returnable && <span className="chip-muted">Pfand {fmtEuro(article.depositCents)} / {article.unit}</span>}
           {article.archivedAt && <span className="chip-warn">archiviert</span>}
         </div>

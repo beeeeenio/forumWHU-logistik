@@ -11,7 +11,7 @@ export interface LageNode { loc: Location; items: ItemLine[]; children: LageNode
 
 export interface Alert {
   level: "error" | "warn" | "info";
-  kind: "NEGATIVE" | "COOLING" | "OVERDUE" | "SOON";
+  kind: "NEGATIVE" | "COOLING" | "OVERDUE" | "SOON" | "LOW";
   text: string;
   href?: string;
 }
@@ -66,6 +66,11 @@ export async function getLage(now = new Date()): Promise<Lage> {
     if (a?.needsCooling && locById.has(r.locationId) && !isCooled(locations, r.locationId)) {
       alerts.push({ level: "warn", kind: "COOLING", text: `${a.name} braucht Kühlung, liegt aber in ${pathName(locations, r.locationId)} (ungekühlt).`, href: `/orte/${r.locationId}` });
     }
+  }
+  // Mindestbestand: voll/vorrätig über alle Orte (Minusbestände zählen mit, ein Minus ist ohnehin gemeldet)
+  for (const a of articles.filter((x) => x.minStock !== null && !x.archivedAt)) {
+    const total = rows.filter((r) => r.articleId === a.id && r.state === "FULL").reduce((s, r) => s + r.quantity, 0);
+    if (total < a.minStock!) alerts.push({ level: "warn", kind: "LOW", text: `${a.name}: nur noch ${total.toLocaleString("de-DE")} ${a.unit === "Kiste" && total !== 1 ? "Kisten" : a.unit} ${a.returnable ? "voll " : ""}(Mindestbestand ${a.minStock!.toLocaleString("de-DE")}).`, href: `/artikel/${a.id}` });
   }
   const soonMs = 24 * 3600 * 1000;
   for (const p of plans) {
@@ -123,7 +128,7 @@ export async function getArticleOverview(articleId: string) {
     prisma.article.findUnique({ where: { id: articleId } }),
     stockRows(prisma, { articleId }),
     prisma.location.findMany(),
-    prisma.movement.findMany({ where: { articleId }, orderBy: { occurredAt: "desc" }, take: 30, include: { fromLocation: true, toLocation: true, supplier: true, createdBy: true, voidedBy: true, article: true } }),
+    prisma.movement.findMany({ where: { articleId }, orderBy: { occurredAt: "desc" }, take: 30, include: { fromLocation: true, toLocation: true, supplier: true, createdBy: true, voidedBy: true, article: true, attachments: { select: { id: true, mime: true, filename: true } } } }),
     prisma.plan.findMany({ where: { articleId, status: "OPEN" }, orderBy: { dueAt: "asc" }, include: { fromLocation: true, toLocation: true, article: true } }),
   ]);
   return { article, rows: rows.filter((r) => r.quantity !== 0), locations, moves, plans };
@@ -145,7 +150,7 @@ export function journalWhere(f: JournalFilter, locations: Location[]): Prisma.Mo
   return where;
 }
 
-export const JOURNAL_INCLUDE = { article: true, fromLocation: true, toLocation: true, supplier: true, createdBy: true, voidedBy: true } satisfies Prisma.MovementInclude;
+export const JOURNAL_INCLUDE = { article: true, fromLocation: true, toLocation: true, supplier: true, createdBy: true, voidedBy: true, attachments: { select: { id: true, mime: true, filename: true } } } satisfies Prisma.MovementInclude;
 
 export async function getJournal(f: JournalFilter) {
   const pageSize = f.pageSize ?? 40;

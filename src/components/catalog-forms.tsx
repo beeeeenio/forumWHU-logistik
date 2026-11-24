@@ -52,7 +52,7 @@ export function LocationForm({ values = {}, options }: { values?: LocValues; opt
   );
 }
 
-export interface ArtValues { id?: string; name?: string; aliases?: string[]; category?: string; unit?: string; returnable?: boolean; depositCents?: number; needsCooling?: boolean; note?: string | null }
+export interface ArtValues { id?: string; name?: string; aliases?: string[]; category?: string; unit?: string; returnable?: boolean; depositCents?: number; needsCooling?: boolean; minStock?: number | null; note?: string | null }
 
 export function ArticleForm({ values = {}, categories }: { values?: ArtValues; categories: string[] }) {
   return (
@@ -65,6 +65,7 @@ export function ArticleForm({ values = {}, categories }: { values?: ArtValues; c
       <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="returnable" defaultChecked={values.returnable} className="size-5" />Pfandartikel (voll/leer getrennt zählen)</label>
       <label><span className="label">Pfand je Einheit (€)</span><input name="deposit" inputMode="decimal" defaultValue={values.depositCents ? (values.depositCents / 100).toFixed(2).replace(".", ",") : "0"} className="field" /></label>
       <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="needsCooling" defaultChecked={values.needsCooling} className="size-5" />Braucht Kühlung</label>
+      <label><span className="label">Mindestbestand (warnt darunter)</span><input name="minStock" inputMode="numeric" defaultValue={values.minStock ?? ""} className="field" placeholder="leer = keine Grenze" /></label>
       <label><span className="label">Notiz</span><input name="note" maxLength={300} defaultValue={values.note ?? ""} className="field" /></label>
       <div className="sm:col-span-2"><SubmitButton>Speichern</SubmitButton></div>
       <datalist id="cat-list">{[...new Set(["Getränke", "Lebensmittel", "Material", "Technik", "Dekoration", "Sonstiges", ...categories])].map((c) => <option key={c} value={c} />)}</datalist>

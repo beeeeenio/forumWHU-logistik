@@ -41,11 +41,11 @@ Login + Rollen · Lagerorte/Artikel/Lieferanten · Buchen (6 Arten, mehrere Zeil
 1. ✅ **Inventurmodus** (`/inventur`): Raum wählen, zählen („stimmt“ oder Zahl), nur Abweichungen werden als Korrekturen gebucht – alles in einer Transaktion; Pfandartikel werden voll und leer gezählt; nicht gebuchte Funde lassen sich hinzufügen.
 2. ✅ **QR-Codes pro Lagerort** (`/qr`, Druckansicht): Scan öffnet den Ort (Inhalt, Eingang hier, Umlagern, Inventur hier); nicht Angemeldete werden erst zum Microsoft-Login geleitet und landen danach im Ort. QR enthält nur die Adresse, keine Daten.
 
-Noch offen:
-1. **Lieferschein-Foto** an einen Eingang hängen.
-2. **Mindestbestand / Soll je Phase** („fürs Frühstück Freitag fehlen 5 Kisten“) und Plan-Vorschläge.
-3. **Benachrichtigung** (Teams/E-Mail) bei überfälligen Plänen oder Kühlungsproblemen.
-4. Mindesthaltbarkeit / Chargen für Lebensmittel.
+3. ✅ **Beleg-Foto / PDF an Buchungen** (Journal, Ortsseiten): Kamera oder Datei, bis 6 MB, JPEG/PNG/WebP/PDF – der Typ wird an den Bytes geprüft (HTML/SVG werden abgelehnt), Auslieferung nur angemeldet, `nosniff` + Sandbox-CSP; Bytes liegen in der Datenbank und damit in der Sicherung.
+4. ✅ **Mindestbestand** je Artikel (voll/vorrätig über alle Orte): Unterschreitung erscheint als Hinweis in der Lage.
+5. ✅ **Benachrichtigung** per Webhook (Teams/Slack) über Cron: `POST /api/cron/alerts`, geschützt durch `CRON_SECRET`, keine Wiederholung bei unveränderter Lage.
+
+Bewusst **nicht** umgesetzt: *Soll je Phase* (Bedarf pro Anlass gegen Bestand) und *Mindesthaltbarkeit/Chargen*. Der Bestand wird je (Artikel, Ort, Zustand) gezählt – Chargen bräuchten eine zusätzliche Dimension im Bestandsmodell und sollten erst nach Praxiserfahrung im Kongress festgelegt werden. Der Plan deckt das „was soll wohin“ bereits ab.
 
 ### Phase 3 – Verzahnung
 1. **NFS-CRM-Anbindung**: gewonnene Sachsponsoring-Deals (z. B. „Staatlich Fachingen · 2027“) erzeugen erwartete Lieferungen im Plan; Eingang bucht zurück in den Deal („geliefert“).

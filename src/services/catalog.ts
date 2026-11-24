@@ -68,7 +68,7 @@ export async function restoreLocation(user: User, id: string): Promise<Res> {
 }
 
 // ── Artikel ───────────────────────────────────────────────────────────────────────────────────────────────────────────
-export interface ArticleInput { name: string; aliases: string[]; category: string; unit: string; returnable: boolean; depositCents: number; needsCooling: boolean; note: string | null }
+export interface ArticleInput { name: string; aliases: string[]; category: string; unit: string; returnable: boolean; depositCents: number; needsCooling: boolean; minStock: number | null; note: string | null }
 
 export async function saveArticle(user: User, id: string | null, d: ArticleInput): Promise<Res<{ id: string }>> {
   const name = clean(d.name);
@@ -79,9 +79,10 @@ export async function saveArticle(user: User, id: string | null, d: ArticleInput
     const empties = (await stockRows(prisma, { articleId: id })).filter((r) => r.state === "EMPTY" && r.quantity !== 0);
     if (empties.length) return { ok: false, error: "Es ist noch Leergut gebucht – „Pfandartikel“ kann erst abgeschaltet werden, wenn keins mehr da ist." };
   }
+  if (d.minStock !== null && (!Number.isInteger(d.minStock) || d.minStock < 0 || d.minStock > 100_000)) return { ok: false, error: "Mindestbestand: bitte eine ganze Zahl ≥ 0 angeben oder das Feld leer lassen." };
   const aliases = [...new Set(d.aliases.map(clean).filter(Boolean))].slice(0, 20);
   try {
-    const data = { name, aliases, category: clean(d.category) || "Sonstiges", unit: clean(d.unit) || "Stück", returnable: d.returnable, depositCents: d.depositCents, needsCooling: d.needsCooling, note: clean(d.note) || null };
+    const data = { name, aliases, category: clean(d.category) || "Sonstiges", unit: clean(d.unit) || "Stück", returnable: d.returnable, depositCents: d.depositCents, needsCooling: d.needsCooling, minStock: d.minStock, note: clean(d.note) || null };
     const a = id ? await prisma.article.update({ where: { id }, data }) : await prisma.article.create({ data });
     await audit(id ? "article.update" : "article.create", { userId: user.id, entity: "article", entityId: a.id, detail: { name } });
     return { ok: true, id: a.id };

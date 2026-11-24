@@ -188,3 +188,49 @@ test("Inventur: nur Abweichungen werden gebucht, alles in einer Transaktion", as
   const bad = await submitCount(user, L004.id, [{ articleId: brot.id, state: "EMPTY", counted: 1 }], "");
   assert.equal(bad.ok, false, "Brötchen haben kein Leergut");
 });
+
+test("Mindestbestand: Unterschreitung erscheint als Hinweis, Auffüllen löst ihn", async () => {
+  const { user, brot, L004 } = d;
+  const total = (await stockRows(prisma, { articleId: brot.id })).filter((r) => r.state === "FULL").reduce((s, r) => s + r.quantity, 0);
+  await prisma.article.update({ where: { id: brot.id }, data: { minStock: total + 5 } });
+  assert.ok((await getLage()).alerts.some((a) => a.kind === "LOW" && a.text.includes("Brötchen")));
+  assert.ok((await bookMovements(user, [{ kind: "RECEIPT", articleId: brot.id, quantity: 5, toLocationId: L004.id }])).ok);
+  assert.equal((await getLage()).alerts.some((a) => a.kind === "LOW" && a.text.includes("Brötchen")), false);
+});
+
+test("Anhang: nur geprüfte Bilder/PDF, Limit je Buchung, wird mit der Buchung gelöscht", async () => {
+  const { addAttachment, removeAttachment } = await import("../../src/services/attachments.ts");
+  const { user, brot, L004 } = d;
+  const r = await bookMovements(user, [{ kind: "RECEIPT", articleId: brot.id, quantity: 1, toLocationId: L004.id }]);
+  assert.ok(r.ok);
+  if (!r.ok) return;
+  const jpeg = Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, ...new Array(40).fill(1)]);
+  const html = new TextEncoder().encode("<html><script>alert(1)</script>");
+  assert.equal((await addAttachment(user, r.ids[0], { name: "x.jpg", bytes: html })).ok, false, "HTML mit .jpg-Namen");
+  const ok = await addAttachment(user, r.ids[0], { name: "Lieferschein.jpg", bytes: jpeg });
+  assert.ok(ok.ok);
+  for (let i = 0; i < 5; i++) await addAttachment(user, r.ids[0], { name: "a.jpg", bytes: jpeg });
+  assert.equal((await addAttachment(user, r.ids[0], { name: "b.jpg", bytes: jpeg })).ok, false, "Limit");
+  if (ok.ok) assert.ok((await removeAttachment(user, ok.id)).ok);
+  await prisma.movement.delete({ where: { id: r.ids[0] } });
+  assert.equal(await prisma.movementAttachment.count({ where: { movementId: r.ids[0] } }), 0);
+});
+
+test("Benachrichtigung: sendet einmal, meldet Unverändertes nicht erneut", async () => {
+  const http = await import("node:http");
+  const got: string[] = [];
+  const srv = http.createServer((req, res) => { let b = ""; req.on("data", (c) => (b += c)); req.on("end", () => { got.push(b); res.end("ok"); }); });
+  await new Promise<void>((r) => srv.listen(0, "127.0.0.1", r));
+  const port = (srv.address() as { port: number }).port;
+  // Der Endpunkt verlangt https; die Logik selbst wird hier gegen einen lokalen Empfänger geprüft.
+  const { env } = await import("../../src/lib/env.ts");
+  (env() as { NOTIFY_WEBHOOK_URL?: string }).NOTIFY_WEBHOOK_URL = `http://127.0.0.1:${port}/hook`;
+  const { notifyAlerts } = await import("../../src/services/notify.ts");
+  const first = await notifyAlerts();
+  const second = await notifyAlerts();
+  srv.close();
+  assert.equal(first.reason, "sent");
+  assert.equal(second.reason, "unchanged");
+  assert.equal(got.length, 1);
+  assert.ok(JSON.parse(got[0]).text.includes("forumWHU Logistik"));
+});
