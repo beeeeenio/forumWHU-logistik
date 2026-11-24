@@ -1,0 +1,265 @@
+// forumWHU Logistik – Datenmodell (Postgres, Prisma).
+//
+// Kernidee: Der Bestand wird NICHT gespeichert, sondern aus unveränderlichen Bewegungen (movements) berechnet.
+//   Bestand(Artikel, Lagerort, Zustand) = Summe aller Zugänge − Summe aller Abgänge (ohne stornierte Bewegungen).
+// Dadurch ist jede Zahl nachvollziehbar („akademischer Stand“), „Löschen“ ist ein Stornieren mit Begründung, und die Historie bleibt.
+// Eine Bewegung hat eine Quelle (from: Lagerort + Zustand) und/oder ein Ziel (to: Lagerort + Zustand):
+//   Eingang        → nur Ziel            Umlagerung   → Quelle und Ziel, gleicher Zustand
+//   Verbrauch      → Quelle (voll) und bei Pfandartikeln Ziel (leer, gleicher Ort)
+//   Leergut zurück → Quelle (leer)       Abgang       → nur Quelle
+//   Korrektur      → Quelle ODER Ziel (Inventur-Differenz, mit Notiz)
+// Spalten/Tabellen: snake_case per @map.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserStatus {
+  PENDING
+  ACTIVE
+  DEACTIVATED
+}
+
+enum UserRole {
+  /// Verwaltet Personen und darf alles andere auch
+  ADMIN
+  /// Erfassen, umlagern, planen, Stammdaten pflegen, stornieren
+  MEMBER
+  /// Nur ansehen (Lagebericht, Journal, Auswertungen)
+  VIEWER
+}
+
+/// voll = noch nicht verbraucht (bei Artikeln ohne Pfand: einfach „vorrätig“); leer = Leergut
+enum StockState {
+  FULL
+  EMPTY
+}
+
+enum LocationKind {
+  /// Gebäude oder Gelände (L, Z, G, Stadthalle, Gewölbekeller)
+  SITE
+  ROOM
+  /// Kühlraum, Kühllager, Kühlkammer
+  COLD
+  /// Kühlanhänger (mobil)
+  TRAILER
+}
+
+enum MovementKind {
+  RECEIPT
+  TRANSFER
+  CONSUME
+  RETURN
+  WRITE_OFF
+  ADJUST
+}
+
+enum PlanStatus {
+  OPEN
+  DONE
+  CANCELLED
+}
+
+model User {
+  id              String     @id @default(uuid(7)) @db.Uuid
+  microsoftOid    String?    @unique @map("microsoft_oid")
+  tenantId        String?    @map("tenant_id")
+  email           String
+  normalizedEmail String     @unique @map("normalized_email")
+  displayName     String     @map("display_name")
+  status          UserStatus @default(PENDING)
+  role            UserRole   @default(MEMBER)
+  lastLoginAt     DateTime?  @map("last_login_at")
+  lastSeenAt      DateTime?  @map("last_seen_at")
+  createdAt       DateTime   @default(now()) @map("created_at")
+  updatedAt       DateTime   @updatedAt @map("updated_at")
+
+  sessions       Session[]
+  movements      Movement[]  @relation("MovementCreator")
+  voidedMoves    Movement[]  @relation("MovementVoider")
+  plans          Plan[]
+  auditEvents    AuditEvent[]
+
+  @@map("users")
+}
+
+model Session {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  tokenHash  String   @unique @map("token_hash")
+  userId     String   @map("user_id") @db.Uuid
+  expiresAt  DateTime @map("expires_at")
+  lastSeenAt DateTime @default(now()) @map("last_seen_at")
+  ipAddress  String?  @map("ip_address")
+  userAgent  String?  @map("user_agent")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model AuthFlowState {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  stateHash    String   @unique @map("state_hash")
+  purpose      String
+  pkceVerifier String   @map("pkce_verifier")
+  nonce        String
+  returnTo     String?  @map("return_to")
+  expiresAt    DateTime @map("expires_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([expiresAt])
+  @@map("auth_flow_states")
+}
+
+/// Wer hat sich angemeldet, wer wurde angelegt/gesperrt, was wurde storniert/gelöscht. Nur anhängen.
+model AuditEvent {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+  userId    String?  @map("user_id") @db.Uuid
+  action    String
+  entity    String?
+  entityId  String?  @map("entity_id")
+  detail    Json?
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([userId])
+  @@map("audit_events")
+}
+
+model Location {
+  id        String       @id @default(uuid(7)) @db.Uuid
+  name      String
+  /// Kurzcode, wie er gesprochen/getippt wird (L004). Eindeutig, ohne Beachtung von Groß-/Kleinschreibung (Index in der Migration).
+  code      String?
+  parentId  String?      @map("parent_id") @db.Uuid
+  kind      LocationKind @default(ROOM)
+  /// Kühlung vorhanden. Kühlpflichtige Artikel an einem Ort ohne Kühlung lösen einen Hinweis im Lagebericht aus.
+  cooled    Boolean      @default(false)
+  note      String?
+  sortOrder Int          @default(0) @map("sort_order")
+  archivedAt DateTime?   @map("archived_at")
+  createdAt DateTime     @default(now()) @map("created_at")
+
+  parent   Location?  @relation("LocationTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children Location[] @relation("LocationTree")
+  movementsFrom Movement[] @relation("MovementFrom")
+  movementsTo   Movement[] @relation("MovementTo")
+  plansFrom     Plan[]     @relation("PlanFrom")
+  plansTo       Plan[]     @relation("PlanTo")
+
+  @@index([parentId])
+  @@map("locations")
+}
+
+model Supplier {
+  id         String    @id @default(uuid(7)) @db.Uuid
+  name       String
+  note       String?
+  archivedAt DateTime? @map("archived_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  movements Movement[]
+
+  @@map("suppliers")
+}
+
+model Article {
+  id           String    @id @default(uuid(7)) @db.Uuid
+  name         String
+  /// Weitere Schreibweisen für die Schnellerfassung („Wasser“, „Fachingen“)
+  aliases      String[]  @default([])
+  category     String    @default("Sonstiges")
+  /// Einzahl, wie gebucht wird: Kiste, Stück, Palette … (Mehrzahl bildet die Oberfläche)
+  unit         String    @default("Stück")
+  /// Pfandartikel: „voll“ und „leer“ werden getrennt gezählt; Verbrauch macht aus voll → leer
+  returnable   Boolean   @default(false)
+  /// Pfand je Einheit in Cent (Kiste Wasser: z. B. 450)
+  depositCents Int       @default(0) @map("deposit_cents")
+  needsCooling Boolean   @default(false) @map("needs_cooling")
+  note         String?
+  archivedAt   DateTime? @map("archived_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  movements Movement[]
+  plans     Plan[]
+
+  @@map("articles")
+}
+
+model Movement {
+  id             String        @id @default(uuid(7)) @db.Uuid
+  /// Zusammengehörige Zeilen einer Erfassung (z. B. eine Lieferung mit mehreren Artikeln)
+  batchId        String?       @map("batch_id") @db.Uuid
+  kind           MovementKind
+  /// Wann es tatsächlich passiert ist (Standard: jetzt; nachträglich erfassbar)
+  occurredAt     DateTime      @default(now()) @map("occurred_at")
+  articleId      String        @map("article_id") @db.Uuid
+  quantity       Int
+  fromLocationId String?       @map("from_location_id") @db.Uuid
+  fromState      StockState?   @map("from_state")
+  toLocationId   String?       @map("to_location_id") @db.Uuid
+  toState        StockState?   @map("to_state")
+  supplierId     String?       @map("supplier_id") @db.Uuid
+  note           String?
+  /// ui = Formular, quick = Schnellerfassung (Text/Sprache), plan = aus einem Plan erledigt
+  source         String        @default("ui")
+  createdById    String        @map("created_by_id") @db.Uuid
+  createdAt      DateTime      @default(now()) @map("created_at")
+  voidedAt       DateTime?     @map("voided_at")
+  voidedById     String?       @map("voided_by_id") @db.Uuid
+  voidReason     String?       @map("void_reason")
+
+  article      Article   @relation(fields: [articleId], references: [id], onDelete: Restrict)
+  fromLocation Location? @relation("MovementFrom", fields: [fromLocationId], references: [id], onDelete: Restrict)
+  toLocation   Location? @relation("MovementTo", fields: [toLocationId], references: [id], onDelete: Restrict)
+  supplier     Supplier? @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  createdBy    User      @relation("MovementCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  voidedBy     User?     @relation("MovementVoider", fields: [voidedById], references: [id], onDelete: SetNull)
+  plan         Plan?     @relation("PlanMovement")
+
+  @@index([articleId, occurredAt])
+  @@index([fromLocationId])
+  @@index([toLocationId])
+  @@index([occurredAt])
+  @@index([batchId])
+  @@map("movements")
+}
+
+/// Soll: was soll wann wohin (z. B. „23 Kisten Wasser aus dem Gewölbekeller ins Kühllager 1 – für das Frühstück Freitag“).
+/// Erledigen bucht die Umlagerung/den Eingang und verknüpft sie.
+model Plan {
+  id             String     @id @default(uuid(7)) @db.Uuid
+  articleId      String     @map("article_id") @db.Uuid
+  quantity       Int
+  state          StockState @default(FULL)
+  fromLocationId String?    @map("from_location_id") @db.Uuid
+  toLocationId   String     @map("to_location_id") @db.Uuid
+  dueAt          DateTime   @map("due_at")
+  /// Phase/Anlass („Frühstück Freitag“, „Aufbau Donnerstag“) – frei, Vorschläge aus früheren Plänen
+  phase          String?
+  note           String?
+  status         PlanStatus @default(OPEN)
+  doneMovementId String?    @unique @map("done_movement_id") @db.Uuid
+  createdById    String     @map("created_by_id") @db.Uuid
+  createdAt      DateTime   @default(now()) @map("created_at")
+  updatedAt      DateTime   @updatedAt @map("updated_at")
+
+  article      Article   @relation(fields: [articleId], references: [id], onDelete: Restrict)
+  fromLocation Location? @relation("PlanFrom", fields: [fromLocationId], references: [id], onDelete: Restrict)
+  toLocation   Location  @relation("PlanTo", fields: [toLocationId], references: [id], onDelete: Restrict)
+  createdBy    User      @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  doneMovement Movement? @relation("PlanMovement", fields: [doneMovementId], references: [id], onDelete: SetNull)
+
+  @@index([status, dueAt])
+  @@map("plans")
+}

@@ -1,0 +1,6 @@
+# Block für die bestehende Caddyfile des NFS-Stacks (/opt/forumwhu-crm/app/deploy/Caddyfile).
+# Vorher: DNS logistik.forumwhu.com -> VPS-IP und unser Stack läuft (Container "logistik-web" im Netz forumwhu-crm-prod_edge).
+logistik.forumwhu.com {
+	encode zstd gzip
+	reverse_proxy logistik-web:3000
+}

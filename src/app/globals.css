@@ -1,0 +1,111 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-sans: var(--font-jost), Futura, "Futura PT", "Trebuchet MS", "Century Gothic", sans-serif;
+  --font-heading: Georgia, "Times New Roman", Times, serif;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-heading: var(--heading);
+  --color-card: var(--card);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-danger: var(--danger);
+  --color-warn: var(--warn);
+  --color-ok: var(--ok);
+  --color-navy: var(--navy);
+  --color-sidebar-fg: var(--sidebar-fg);
+  --shadow-soft: var(--shadow-soft);
+}
+
+/* DESIGN-TOKENS – forumWHU Design System 2026. NAVY ist Basis, ORANGE Signalfarbe (Buttons, Markierung; nie als Text auf hellem Grund),
+   BEIGE Ruhezone. Rohwerte nur hier; Komponenten nutzen die semantischen Tokens. */
+:root {
+  --navy: #061638;
+  --navy-700: #0d1f47;
+  --navy-600: #13264f;
+  --navy-500: #23365f;
+  --navy-400: #2f4472;
+  --orange: #f08100;
+  --orange-700: #a35400;
+  --beige: #f4eee0;
+  --beige-400: #f6f1e6;
+  --beige-600: #e4ddcc;
+
+  --background: var(--beige-400);
+  --foreground: #404040;
+  --heading: var(--navy);
+  --card: #ffffff;
+  --muted: var(--beige);
+  --muted-foreground: #666666;
+  --primary: var(--orange);
+  --primary-foreground: var(--navy);
+  --border: var(--beige-600);
+  --input: #b3b3b3;
+  --ring: color-mix(in srgb, var(--navy) 35%, transparent);
+  --danger: #c4320a;
+  --warn: #9a6b00;
+  --ok: #1a6b3d;
+  --shadow-soft: 0 1px 2px rgb(6 22 56 / 6%), 0 1px 3px rgb(6 22 56 / 8%);
+  --sidebar-fg: var(--beige);
+  --tabbar-h: 4.25rem;
+}
+
+.dark {
+  color-scheme: dark;
+  --heading: #ffffff;
+  --background: #040e26;
+  --foreground: var(--beige);
+  --card: var(--navy-700);
+  --muted: var(--navy-600);
+  --muted-foreground: #b3b3b3;
+  --border: var(--navy-500);
+  --input: var(--navy-400);
+  --ring: color-mix(in srgb, var(--orange) 55%, transparent);
+  --danger: #ff8f70;
+  --warn: #f3c15a;
+  --ok: #6fd39a;
+  --shadow-soft: 0 1px 2px rgb(0 0 0 / 40%);
+}
+
+@layer base {
+  * { @apply border-border; }
+  html { @apply font-sans; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; -webkit-text-size-adjust: 100%; }
+  body { @apply bg-background text-foreground; }
+  h1, h2, h3 { @apply font-heading tracking-tight text-heading; }
+  button:not(:disabled), [role="button"]:not(:disabled), summary { cursor: pointer; }
+  :focus-visible { outline: 3px solid var(--ring); outline-offset: 2px; }
+  /* iOS zoomt in Felder < 16px hinein: Felder immer mindestens 16px */
+  input, select, textarea { font-size: 16px; }
+}
+
+@layer components {
+  .card { @apply rounded-2xl border bg-card shadow-soft; }
+  /* Basis aller Buttons/Chips über gemeinsame Selektoren (Tailwind 4 erlaubt @apply nicht auf eigene Klassen) */
+  .btn, .btn-primary, .btn-secondary, .btn-danger { @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border px-4 text-sm font-medium transition-colors disabled:opacity-50; }
+  .btn-primary { @apply border-transparent bg-primary text-primary-foreground hover:brightness-95; }
+  .btn-secondary { @apply bg-card text-heading hover:bg-muted; }
+  .btn-danger { @apply bg-card text-danger border-danger/40 hover:bg-danger/10; }
+  .btn-sm { @apply min-h-9 rounded-lg px-3 text-xs; }
+  .field { @apply min-h-11 w-full rounded-xl border border-input bg-card px-3 text-foreground placeholder:text-muted-foreground; }
+  textarea.field { @apply py-2; }
+  .label { @apply mb-1 block text-xs font-medium tracking-wide text-muted-foreground uppercase; }
+  .chip, .chip-warn, .chip-danger, .chip-ok, .chip-muted { @apply inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium; }
+  .chip-warn { @apply border-warn/40 bg-warn/10 text-warn; }
+  .chip-danger { @apply border-danger/40 bg-danger/10 text-danger; }
+  .chip-ok { @apply border-ok/40 bg-ok/10 text-ok; }
+  .chip-muted { @apply bg-muted text-muted-foreground; }
+  .page { @apply mx-auto w-full max-w-5xl px-4 py-5 md:px-8 md:py-8; }
+  .h1 { @apply text-2xl md:text-3xl; }
+}
+
+/* Tab-Leiste und Inhalt: Platz für den iPhone-Home-Balken */
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+details > summary { list-style: none; }
+details > summary::-webkit-details-marker { display: none; }

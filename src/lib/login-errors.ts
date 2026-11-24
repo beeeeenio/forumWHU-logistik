@@ -1,0 +1,16 @@
+export const LOGIN_ERRORS: Record<string, string> = {
+  not_configured: "Die Microsoft-Anmeldung ist auf diesem Server noch nicht eingerichtet. Bitte an die Administration wenden.",
+  not_provisioned: "Dein Konto ist noch nicht freigeschaltet. Bitte eine Administratorin oder einen Administrator, dich einzutragen.",
+  deactivated: "Dein Zugang ist gesperrt. Bitte an die Administration wenden.",
+  wrong_tenant: "Bitte mit deinem forumWHU-Konto anmelden (anderes Verzeichnis).",
+  identity_mismatch: "Dieses Microsoft-Konto passt nicht zum eingetragenen Zugang. Bitte an die Administration wenden.",
+  no_email: "Microsoft hat keine E-Mail-Adresse geliefert. Bitte an die Administration wenden.",
+  expired: "Die Anmeldung ist abgelaufen. Bitte noch einmal starten.",
+  consent_denied: "Die Anmeldung wurde abgebrochen.",
+  invalid_request: "Die Anmeldung konnte nicht geprüft werden. Bitte noch einmal starten.",
+  invalid_nonce: "Die Anmeldung konnte nicht geprüft werden. Bitte noch einmal starten.",
+  invalid_token: "Die Anmeldung konnte nicht geprüft werden. Bitte noch einmal starten.",
+  microsoft_error: "Microsoft hat die Anmeldung abgelehnt. Bitte noch einmal versuchen.",
+  login_failed: "Die Anmeldung ist fehlgeschlagen. Bitte noch einmal versuchen.",
+  unknown: "Die Anmeldung ist fehlgeschlagen.",
+};

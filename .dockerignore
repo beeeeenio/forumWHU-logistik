@@ -1,0 +1,9 @@
+node_modules
+.next
+.git
+docs
+deploy
+tests
+.env*
+!.env.example
+backups

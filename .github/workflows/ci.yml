@@ -1,0 +1,39 @@
+name: Prüfung
+
+# Typen, Lint, Unit-Tests, Datenbanktests (frische PostgreSQL-Datenbank mit allen Migrationen), Build und Abhängigkeitsprüfung.
+# Es werden keine Geheimnisse gebraucht; alle Werte hier sind Platzhalter der Testumgebung.
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  pruefen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env: { POSTGRES_USER: ci, POSTGRES_PASSWORD: ci, POSTGRES_DB: logistik_ci }
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U ci -d logistik_ci" --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/logistik_ci
+      TEST_DATABASE_URL: postgresql://ci:ci@localhost:5432/logistik_ci
+      APP_URL: http://localhost:3000
+      SESSION_SECRET: ci-only-secret-0123456789abcdef0123456789abcdef
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: npm }
+      - run: npm ci
+      - run: npx prisma migrate deploy
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npm run test:db
+      - run: npm run build
+      - run: npm audit --omit=dev --audit-level=high

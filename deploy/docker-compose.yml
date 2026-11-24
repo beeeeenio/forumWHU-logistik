@@ -1,0 +1,69 @@
+# forumWHU Logistik auf dem Hostinger-VPS – eigener Stack neben NFS-CRM und Participant-CRM (anderer Name, Port, Netz, Volume, Verzeichnis).
+# Die Datenbank hat KEINEN veröffentlichten Port. Die App lauscht nur auf 127.0.0.1:3200; öffentlich wird sie über den Caddy des NFS-Stacks
+# (deploy/Caddy-logistik.snippet). Benötigt deploy/.env (nicht committen), Vorlage: deploy/.env.production.example
+name: logistik
+
+x-app-env: &app-env
+  DATABASE_URL: postgresql://logistik:${POSTGRES_PASSWORD:?fehlt}@db:5432/${POSTGRES_DB:-logistik}
+  APP_URL: ${APP_URL:?fehlt}
+  SESSION_SECRET: ${SESSION_SECRET:?fehlt}
+  SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-12}
+  TRUST_PROXY: ${TRUST_PROXY:-true}
+  AUTH_MODE: microsoft
+  MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID:-}
+  MICROSOFT_CLIENT_SECRET: ${MICROSOFT_CLIENT_SECRET:-}
+  MICROSOFT_TENANT_ID: ${MICROSOFT_TENANT_ID:-}
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: logistik
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?fehlt}
+      POSTGRES_DB: ${POSTGRES_DB:-logistik}
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U logistik -d ${POSTGRES_DB:-logistik}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [internal]
+
+  # Dienstname bewusst NICHT „web“: im Netz des NFS-Caddy (edge) heißt schon ein Container so.
+  logistik-web:
+    build: { context: .. }
+    image: logistik:local
+    restart: unless-stopped
+    environment: *app-env
+    depends_on: { db: { condition: service_healthy } }
+    ports: ["127.0.0.1:3200:3000"]
+    read_only: true
+    tmpfs: ["/tmp", "/app/.next/cache"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    networks: [internal, edge]
+
+  # Einmalige Befehle: docker compose --env-file .env run --rm migrate  |  … run --rm tools npx tsx scripts/create-user.mts …
+  migrate:
+    image: logistik:local
+    profiles: ["tools"]
+    command: ["node_modules/.bin/prisma", "migrate", "deploy"]
+    environment: *app-env
+    depends_on: { db: { condition: service_healthy } }
+    networks: [internal]
+
+  tools:
+    image: logistik:local
+    profiles: ["tools"]
+    environment: *app-env
+    depends_on: { db: { condition: service_healthy } }
+    networks: [internal]
+
+networks:
+  internal: {}
+  edge:
+    external: true
+    name: forumwhu-crm-prod_edge
+volumes:
+  pgdata: {}
