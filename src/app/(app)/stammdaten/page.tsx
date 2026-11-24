@@ -39,6 +39,7 @@ async function Orte() {
   const options = tree.map((n) => ({ id: n.loc.id, label: pathName(locations, n.loc.id) }));
   return (
     <div className="space-y-4">
+      <p className="text-sm"><Link href="/qr" className="underline">QR-Etiketten für alle Lagerorte drucken</Link></p>
       <details className="card p-4"><summary className="flex items-center gap-2 font-medium text-heading"><Plus className="size-5" />Neuer Lagerort</summary><div className="mt-4"><LocationForm options={options} /></div></details>
       {tree.length === 0 ? <Empty title="Noch keine Lagerorte" /> : (
         <ul className="space-y-2">

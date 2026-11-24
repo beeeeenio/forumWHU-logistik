@@ -15,6 +15,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
     ...(writer ? [{ href: "/buchen", label: "Buchen", icon: "buchen" }] : []),
     { href: "/plan", label: "Plan", icon: "plan" },
     { href: "/pfand", label: "Leergut & Pfand", icon: "pfand" },
+    ...(writer ? [{ href: "/inventur", label: "Inventur", icon: "inventur" }] : []),
     { href: "/journal", label: "Journal", icon: "journal" },
     ...(writer ? [{ href: "/stammdaten", label: "Stammdaten", icon: "stammdaten" }] : []),
     ...(isAdmin(user.role) ? [{ href: "/admin", label: "Personen", icon: "admin" }] : []),
@@ -27,8 +28,8 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
     { href: "/mehr", label: "Mehr", icon: "mehr" },
   ];
   return (
-    <div className="flex min-h-dvh flex-1">
-      <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 flex-col justify-between bg-navy p-4 md:flex">
+    <div className="flex min-h-dvh flex-1 print:block">
+      <aside className="print:hidden sticky top-0 hidden h-dvh w-60 shrink-0 flex-col justify-between bg-navy p-4 md:flex">
         <div className="space-y-8">
           <Brand tone="navy" height={42} className="px-2 pt-2" />
           <SideNav items={side} />
@@ -45,13 +46,13 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
         </div>
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-20 flex items-center justify-between bg-navy px-4 py-3 md:hidden">
+        <header className="print:hidden sticky top-0 z-20 flex items-center justify-between bg-navy px-4 py-3 md:hidden">
           <Brand tone="navy" height={28} />
           <span className="text-xs text-sidebar-fg/80">{user.displayName.split(" ")[0]} · {ROLE_LABEL[user.role]}</span>
         </header>
         <main className="flex-1 pb-[calc(var(--tabbar-h)+env(safe-area-inset-bottom)+1rem)] md:pb-0">{children}</main>
       </div>
-      <TabBar items={tabs} />
+      <div className="print:hidden"><TabBar items={tabs} /></div>
     </div>
   );
 }

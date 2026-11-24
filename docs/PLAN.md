@@ -37,13 +37,15 @@ Regeln stehen als reine Funktionen in `src/lib/domain/` (getestet) und zusätzli
 ### Phase 1 – umgesetzt (dieser Stand)
 Login + Rollen · Lagerorte/Artikel/Lieferanten · Buchen (6 Arten, mehrere Zeilen alles-oder-nichts, nachträglich mit Zeitpunkt) · Schnellerfassung (deterministischer Parser, Diktat im Browser) · Lage mit Warnungen (Minusbestand, Kühlung, überfällige Pläne) · Orts- und Artikelseiten mit Schnellaktionen · Plan · Leergut & Pfand · Journal + Storno + CSV · Personenverwaltung + Protokoll · Docker/Caddy/Backup/CI.
 
-### Phase 2 – nächste Schritte
-1. **Inventurmodus**: einen Raum öffnen, alle Positionen nacheinander zählen, Differenzen auf einmal buchen.
-2. **QR-Codes pro Lagerort** (ausdrucken, an die Tür): Scan öffnet den Raum mit „Eingang hier / Umlagern“.
-3. **Lieferschein-Foto** an einen Eingang hängen.
-4. **Mindestbestand / Soll je Phase** („fürs Frühstück Freitag fehlen 5 Kisten“) und Plan-Vorschläge.
-5. **Benachrichtigung** (Teams/E-Mail) bei überfälligen Plänen oder Kühlungsproblemen.
-6. Mindesthaltbarkeit / Chargen für Lebensmittel.
+### Phase 2 – begonnen
+1. ✅ **Inventurmodus** (`/inventur`): Raum wählen, zählen („stimmt“ oder Zahl), nur Abweichungen werden als Korrekturen gebucht – alles in einer Transaktion; Pfandartikel werden voll und leer gezählt; nicht gebuchte Funde lassen sich hinzufügen.
+2. ✅ **QR-Codes pro Lagerort** (`/qr`, Druckansicht): Scan öffnet den Ort (Inhalt, Eingang hier, Umlagern, Inventur hier); nicht Angemeldete werden erst zum Microsoft-Login geleitet und landen danach im Ort. QR enthält nur die Adresse, keine Daten.
+
+Noch offen:
+1. **Lieferschein-Foto** an einen Eingang hängen.
+2. **Mindestbestand / Soll je Phase** („fürs Frühstück Freitag fehlen 5 Kisten“) und Plan-Vorschläge.
+3. **Benachrichtigung** (Teams/E-Mail) bei überfälligen Plänen oder Kühlungsproblemen.
+4. Mindesthaltbarkeit / Chargen für Lebensmittel.
 
 ### Phase 3 – Verzahnung
 1. **NFS-CRM-Anbindung**: gewonnene Sachsponsoring-Deals (z. B. „Staatlich Fachingen · 2027“) erzeugen erwartete Lieferungen im Plan; Eingang bucht zurück in den Deal („geliefert“).

@@ -166,3 +166,25 @@ test("Bestand ist die Summe der Bewegungen (Gegenprobe)", async () => {
   for (const m of moves) { if (m.toLocationId) sum += m.quantity; if (m.fromLocationId) sum -= m.quantity; }
   assert.equal(rows.reduce((s, r) => s + r.quantity, 0), sum);
 });
+
+test("Inventur: nur Abweichungen werden gebucht, alles in einer Transaktion", async () => {
+  const { submitCount } = await import("../../src/services/inventory.ts");
+  const { user, wasser, brot, L004 } = d;
+  const w = await q(wasser.id, L004.id, "FULL");
+  const b = await q(brot.id, L004.id, "FULL");
+  const before = await prisma.movement.count();
+  const r = await submitCount(user, L004.id, [
+    { articleId: wasser.id, state: "FULL", counted: w },
+    { articleId: brot.id, state: "FULL", counted: b + 4 },
+    { articleId: wasser.id, state: "EMPTY", counted: 3 },
+  ], "Freitagabend");
+  assert.ok(r.ok);
+  if (r.ok) { assert.equal(r.changed, 2); assert.equal(r.same, 1); }
+  assert.equal(await prisma.movement.count(), before + 2);
+  assert.equal(await q(brot.id, L004.id, "FULL"), b + 4);
+  assert.equal(await q(wasser.id, L004.id, "EMPTY"), 3);
+  const again = await submitCount(user, L004.id, [{ articleId: brot.id, state: "FULL", counted: b + 4 }], "");
+  assert.ok(again.ok && again.changed === 0);
+  const bad = await submitCount(user, L004.id, [{ articleId: brot.id, state: "EMPTY", counted: 1 }], "");
+  assert.equal(bad.ok, false, "Brötchen haben kein Leergut");
+});

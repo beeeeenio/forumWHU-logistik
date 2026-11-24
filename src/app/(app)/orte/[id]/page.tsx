@@ -43,7 +43,7 @@ export default async function OrtPage({ params }: PageProps<"/orte/[id]">) {
           {loc.archivedAt && <span className="chip-warn">archiviert</span>}
         </div>
         {loc.note && <p className="mt-1 text-sm text-muted-foreground">{loc.note}</p>}
-        {writer && <div className="mt-3 flex flex-wrap gap-2"><Link href={buchenHref({ kind: "RECEIPT", to: id })} className="btn-primary btn-sm"><Plus className="size-4" />Eingang hier</Link><Link href={buchenHref({ kind: "TRANSFER", to: id })} className="btn-secondary btn-sm">Hierher umlagern</Link></div>}
+        {writer && <div className="mt-3 flex flex-wrap gap-2"><Link href={buchenHref({ kind: "RECEIPT", to: id })} className="btn-primary btn-sm"><Plus className="size-4" />Eingang hier</Link><Link href={buchenHref({ kind: "TRANSFER", to: id })} className="btn-secondary btn-sm">Hierher umlagern</Link><Link href={`/inventur/${id}`} className="btn-secondary btn-sm">Inventur hier</Link><Link href={`/qr?ids=${id}`} className="btn-secondary btn-sm">QR-Etikett</Link></div>}
       </div>
 
       {children.length > 0 && (

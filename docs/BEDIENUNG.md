@@ -17,6 +17,10 @@
 
 **Leergut & Pfand:** voll/leer/zurück je Artikel, Pfandwert, wo das Leergut liegt.
 
+**Inventur:** Menü → Inventur (oder „Inventur hier“ auf der Ortsseite). Raum zählen, bei jeder Zeile Zahl eintragen oder „stimmt“ tippen; unten stehen die Abweichungen als Knopf. Gebucht werden nur Differenzen, mit Notiz im Journal.
+
+**QR-Etiketten:** Mehr → QR-Etiketten → Drucken, an Türen und Regale kleben. Handy-Kamera scannen öffnet den Ort in der App (Anmeldung nötig).
+
 **Journal:** alle Buchungen filtern, **Stornieren** (mit Grund; Buchung bleibt sichtbar, zählt nicht mehr), **Als Vorlage**, Excel-Export.
 
 **Rollen:** Betrachter sehen alles, ändern nichts. Mitglieder buchen, planen, pflegen Stammdaten. Administratoren verwalten zusätzlich Personen.

@@ -1,12 +1,12 @@
 "use client";
 
-import { CalendarClock, CirclePlus, Ellipsis, Recycle, ScrollText, Settings2, Users, Warehouse, type LucideIcon } from "lucide-react";
+import { CalendarClock, CirclePlus, ClipboardCheck, Ellipsis, Recycle, ScrollText, Settings2, Users, Warehouse, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 export interface NavItem { href: string; label: string; icon: string }
-const ICONS: Record<string, LucideIcon> = { lage: Warehouse, buchen: CirclePlus, plan: CalendarClock, pfand: Recycle, journal: ScrollText, stammdaten: Settings2, admin: Users, mehr: Ellipsis };
+const ICONS: Record<string, LucideIcon> = { lage: Warehouse, buchen: CirclePlus, plan: CalendarClock, pfand: Recycle, journal: ScrollText, stammdaten: Settings2, admin: Users, mehr: Ellipsis, inventur: ClipboardCheck };
 
 const active = (path: string, href: string) => (href === "/" ? path === "/" || path.startsWith("/orte") || path.startsWith("/artikel") : path === href || path.startsWith(href + "/"));
 
@@ -37,7 +37,7 @@ export function TabBar({ items }: { items: NavItem[] }) {
       <ul className="mx-auto flex max-w-xl">
         {items.map((i) => {
           const Icon = ICONS[i.icon] ?? Warehouse;
-          const on = active(path, i.href) || (i.href === "/mehr" && ["/journal", "/stammdaten", "/admin"].some((p) => path.startsWith(p)));
+          const on = active(path, i.href) || (i.href === "/mehr" && ["/journal", "/stammdaten", "/admin", "/inventur", "/qr"].some((p) => path.startsWith(p)));
           const hot = i.icon === "buchen";
           return (
             <li key={i.href} className="flex-1">
