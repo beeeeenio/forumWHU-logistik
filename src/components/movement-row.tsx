@@ -36,7 +36,7 @@ export function MovementRow({ m, locations, canWrite, copyHref }: { m: MovementF
         </div>
         <div className="text-right text-xs text-muted-foreground">
           <p>{fmtDateTime(m.occurredAt)}</p>
-          <p>{m.createdBy.displayName}{m.source === "quick" ? " · Schnellerfassung" : m.source === "plan" ? " · aus Plan" : ""}</p>
+          <p>{m.createdBy.displayName}{m.source === "quick" ? " · Schnellerfassung" : m.source === "inventory" ? " · Inventur" : m.source === "plan" ? " · aus Plan" : ""}</p>
         </div>
       </div>
       {voided && <p className="mt-2 rounded-lg bg-danger/10 p-2 text-xs text-danger">Storniert{m.voidedBy ? ` von ${m.voidedBy.displayName}` : ""}{m.voidedAt ? ` am ${fmtDateTime(m.voidedAt)}` : ""}: {m.voidReason}</p>}

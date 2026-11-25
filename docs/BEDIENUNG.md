@@ -17,7 +17,9 @@
 
 **Leergut & Pfand:** voll/leer/zurück je Artikel, Pfandwert, wo das Leergut liegt.
 
-**Inventur:** Menü → Inventur (oder „Inventur hier“ auf der Ortsseite). Raum zählen, bei jeder Zeile Zahl eintragen oder „stimmt“ tippen; unten stehen die Abweichungen als Knopf. Gebucht werden nur Differenzen, mit Notiz im Journal.
+**Inventur:** Menü → Inventur (oder „Inventur hier“ auf der Ortsseite). Raum zählen, bei jeder Zeile Zahl eintragen oder „stimmt“ tippen; unten stehen die Abweichungen als Knopf. Mit „Prüfen“ siehst du vor dem Buchen alle Abweichungen (große sind markiert – lieber nachzählen). Gebucht werden nur Differenzen, mit Notiz im Journal. **Falsch gezählt?** Direkt danach oder später unter Inventur → „Frühere Inventuren“ die ganze Zählung zurücknehmen (mit Grund) und neu zählen.
+
+**Demo-Daten zum Ausprobieren:** `npm run db:demo` (nur in leerer Datenbank).
 
 **Belege:** Im Journal (und auf Orts-/Artikelseiten) bei einer Buchung „Beleg / Foto“ tippen: Lieferschein fotografieren oder PDF wählen. Antippen vergrößert, ✕ entfernt.
 

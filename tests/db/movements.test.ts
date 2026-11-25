@@ -234,3 +234,27 @@ test("Benachrichtigung: sendet einmal, meldet Unverändertes nicht erneut", asyn
   assert.equal(got.length, 1);
   assert.ok(JSON.parse(got[0]).text.includes("forumWHU Logistik"));
 });
+
+test("Inventur zurücknehmen: ganze Zählung wird storniert, Bestand wie vorher, nur einmal möglich", async () => {
+  const { submitCount, voidInventory, listInventories } = await import("../../src/services/inventory.ts");
+  const { user, brot, wasser, L004 } = d;
+  const b0 = await q(brot.id, L004.id, "FULL");
+  const w0 = await q(wasser.id, L004.id, "EMPTY");
+  const r = await submitCount(user, L004.id, [{ articleId: brot.id, state: "FULL", counted: b0 + 7 }, { articleId: wasser.id, state: "EMPTY", counted: w0 + 2 }], "falsch");
+  assert.ok(r.ok && r.batchId);
+  if (!r.ok || !r.batchId) return;
+  assert.equal(await q(brot.id, L004.id, "FULL"), b0 + 7);
+  let runs = await listInventories(L004.id);
+  assert.ok(runs.some((x) => x.batchId === r.batchId && !x.voided && x.lines.length === 2));
+  assert.equal((await voidInventory(user, r.batchId, "")).ok, false, "Grund ist Pflicht");
+  const v = await voidInventory(user, r.batchId, "falsch gezählt");
+  assert.ok(v.ok && v.voided === 2);
+  assert.equal(await q(brot.id, L004.id, "FULL"), b0);
+  assert.equal(await q(wasser.id, L004.id, "EMPTY"), w0);
+  runs = await listInventories(L004.id);
+  assert.ok(runs.find((x) => x.batchId === r.batchId)?.voided);
+  assert.equal((await voidInventory(user, r.batchId, "nochmal")).ok, false, "nur einmal");
+  // eine einzelne Korrektur bekommt trotzdem eine Kennung (sonst nicht zurücknehmbar)
+  const one = await submitCount(user, L004.id, [{ articleId: brot.id, state: "FULL", counted: b0 + 1 }], "");
+  assert.ok(one.ok && one.batchId);
+});

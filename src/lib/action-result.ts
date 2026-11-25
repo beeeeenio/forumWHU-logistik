@@ -9,6 +9,8 @@ export interface ActionResult {
   code?: "INSUFFICIENT" | "INVALID" | "FORBIDDEN";
   /** Zeile (0-basiert), auf die sich der Fehler bezieht */
   index?: number;
+  /** Inventur: Kennung der gebuchten Zählung (zum Zurücknehmen) */
+  batchId?: string;
   /** Zählt bei jedem Erfolg hoch – damit Formulare sich zurücksetzen */
   nonce?: number;
 }

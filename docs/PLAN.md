@@ -38,7 +38,7 @@ Regeln stehen als reine Funktionen in `src/lib/domain/` (getestet) und zusätzli
 Login + Rollen · Lagerorte/Artikel/Lieferanten · Buchen (6 Arten, mehrere Zeilen alles-oder-nichts, nachträglich mit Zeitpunkt) · Schnellerfassung (deterministischer Parser, Diktat im Browser) · Lage mit Warnungen (Minusbestand, Kühlung, überfällige Pläne) · Orts- und Artikelseiten mit Schnellaktionen · Plan · Leergut & Pfand · Journal + Storno + CSV · Personenverwaltung + Protokoll · Docker/Caddy/Backup/CI.
 
 ### Phase 2 – begonnen
-1. ✅ **Inventurmodus** (`/inventur`): Raum wählen, zählen („stimmt“ oder Zahl), nur Abweichungen werden als Korrekturen gebucht – alles in einer Transaktion; Pfandartikel werden voll und leer gezählt; nicht gebuchte Funde lassen sich hinzufügen.
+1. ✅ **Inventurmodus** (`/inventur`): Raum wählen, zählen („stimmt“ oder Zahl), **Prüfansicht** vor dem Buchen (auffällige Abweichungen markiert), nur Abweichungen werden als Korrekturen gebucht – alles in einer Transaktion; **falsch gezählt → ganze Zählung zurücknehmen** (Grund Pflicht, Bestand wie vorher) und **Inventur-Verlauf** (`/inventur/verlauf`); Pfandartikel werden voll und leer gezählt; nicht gebuchte Funde lassen sich hinzufügen.
 2. ✅ **QR-Codes pro Lagerort** (`/qr`, Druckansicht): Scan öffnet den Ort (Inhalt, Eingang hier, Umlagern, Inventur hier); nicht Angemeldete werden erst zum Microsoft-Login geleitet und landen danach im Ort. QR enthält nur die Adresse, keine Daten.
 
 3. ✅ **Beleg-Foto / PDF an Buchungen** (Journal, Ortsseiten): Kamera oder Datei, bis 6 MB, JPEG/PNG/WebP/PDF – der Typ wird an den Bytes geprüft (HTML/SVG werden abgelehnt), Auslieferung nur angemeldet, `nosniff` + Sandbox-CSP; Bytes liegen in der Datenbank und damit in der Sicherung.
@@ -47,10 +47,8 @@ Login + Rollen · Lagerorte/Artikel/Lieferanten · Buchen (6 Arten, mehrere Zeil
 
 Bewusst **nicht** umgesetzt: *Soll je Phase* (Bedarf pro Anlass gegen Bestand) und *Mindesthaltbarkeit/Chargen*. Der Bestand wird je (Artikel, Ort, Zustand) gezählt – Chargen bräuchten eine zusätzliche Dimension im Bestandsmodell und sollten erst nach Praxiserfahrung im Kongress festgelegt werden. Der Plan deckt das „was soll wohin“ bereits ab.
 
-### Phase 3 – Verzahnung
-1. **NFS-CRM-Anbindung**: gewonnene Sachsponsoring-Deals (z. B. „Staatlich Fachingen · 2027“) erzeugen erwartete Lieferungen im Plan; Eingang bucht zurück in den Deal („geliefert“).
-2. **Claude als Erfasser** (wie beim CRM über MCP, Claude schlägt vor, Mensch bestätigt): Sprachnachricht/Foto → Buchungsvorschlag; „Was fehlt für Samstag?“.
-3. Offline-Modus (Keller ohne Empfang): Buchungen lokal sammeln, später senden.
+### Weitere Ideen
+Siehe [IDEEN.md](IDEEN.md). Die Anbindung an das NFS-CRM ist **nicht gewünscht** und gestrichen.
 
 ## Entscheidungen und Annahmen (bitte prüfen)
 - **Adresse:** `logistik.forumwhu.com` (Port 3200 auf dem VPS). Andere Adresse → nur `APP_URL`, Caddy-Block und Entra-Redirect ändern.

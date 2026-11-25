@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/db/prisma";
+import { InventoryRuns } from "@/components/inventory-runs";
+import { listInventories } from "@/services/inventory";
 import { InventoryForm, type InvRow } from "@/components/inventory-form";
 import { pathName } from "@/lib/domain/tree";
 import { requireWriter } from "@/lib/session";
@@ -27,6 +29,7 @@ export default async function InventurOrtPage({ params }: PageProps<"/inventur/[
     const states = a.returnable ? (["FULL", "EMPTY"] as const) : (["FULL"] as const);
     for (const s of states) initial.push({ articleId: a.id, name: a.name, unit: a.unit, returnable: a.returnable, state: s, current: mine.find((r) => r.state === s)?.quantity ?? 0 });
   }
+  const runs = await listInventories(id, 5);
   const children = locations.filter((l) => l.parentId === id && !l.archivedAt);
   return (
     <div className="page max-w-3xl space-y-5">
@@ -37,6 +40,7 @@ export default async function InventurOrtPage({ params }: PageProps<"/inventur/[
         {children.length > 0 && <p className="mt-2 text-sm">Unterorte separat zählen: {children.map((c) => <Link key={c.id} href={`/inventur/${c.id}`} className="mr-2 underline">{c.name}</Link>)}</p>}
       </div>
       <InventoryForm key={id} locationId={id} locationName={loc.name} initial={initial} articles={articles.map((a) => ({ id: a.id, name: a.name, unit: a.unit, returnable: a.returnable }))} />
+      <section className="space-y-3 pt-4"><h2 className="text-xl">Letzte Inventuren hier</h2><InventoryRuns runs={runs} canWrite showLocation={false} /></section>
     </div>
   );
 }

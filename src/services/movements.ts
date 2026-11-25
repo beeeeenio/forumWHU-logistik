@@ -22,7 +22,7 @@ export interface BookInput {
   supplierName?: string | null;
   note?: string | null;
   occurredAt?: Date | null;
-  source?: "ui" | "quick" | "plan";
+  source?: "ui" | "quick" | "plan" | "inventory";
   /** Trotz zu geringem Bestand buchen (Bestand wird negativ und im Lagebericht markiert) */
   force?: boolean;
   /** nur intern: Plan, der dadurch erledigt wird */
@@ -137,10 +137,10 @@ async function bookOne(tx: Tx, user: User, input: BookInput, batchId: string | n
 }
 
 /** Bucht eine oder mehrere Bewegungen in EINER Transaktion: entweder alle oder keine (z. B. eine ganze Lieferung). */
-export async function bookMovements(user: User, inputs: BookInput[]): Promise<BookResult> {
+export async function bookMovements(user: User, inputs: BookInput[], opts: { batchId?: string } = {}): Promise<BookResult> {
   if (!inputs.length) return { ok: false, code: "INVALID", error: "Nichts zu buchen." };
   if (inputs.length > 100) return { ok: false, code: "INVALID", error: "Höchstens 100 Zeilen auf einmal." };
-  const batchId = inputs.length > 1 ? crypto.randomUUID() : null;
+  const batchId = opts.batchId ?? (inputs.length > 1 ? crypto.randomUUID() : null);
   try {
     return await prisma.$transaction(async (tx) => {
       const ids: string[] = [];
