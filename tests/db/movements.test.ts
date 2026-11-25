@@ -302,23 +302,30 @@ test("Sofort rückgängig: nur eigene Buchungen der letzten 15 Minuten", async (
   }
 });
 
-test("Inventur: Bewegungen während des Zählens werden herausgerechnet", async () => {
+test("Inventur: Änderungen während des Zählens (Buchung, Storno) werden herausgerechnet", async () => {
   const { submitCount } = await import("../../src/services/inventory.ts");
   const { user, wasser, L004, SH } = d;
   await bookMovements(user, [{ kind: "ADJUST", articleId: wasser.id, quantity: 20, fromLocationId: L004.id, note: "Vorbereitung" }]);
-  const started = new Date();
-  await new Promise((r) => setTimeout(r, 30));
-  // Während jemand zählt (er sieht 20), werden 5 Kisten nach nebenan gebracht
+  const expected = await q(wasser.id, L004.id, "FULL"); // das sieht die Person beim Öffnen: 20
+  // Während sie zählt: 5 Kisten nach nebenan gebracht
   assert.ok((await bookMovements(user, [{ kind: "TRANSFER", articleId: wasser.id, quantity: 5, fromLocationId: L004.id, toLocationId: SH.id }])).ok);
-  // Gezählt wurde der Stand zu Beginn: 20. Es darf KEINE Differenz entstehen (5 sind ja bewusst weg).
-  const r = await submitCount(user, L004.id, [{ articleId: wasser.id, state: "FULL", counted: 20 }], "", started);
+  // Gezählt wurde der Stand zu Beginn (20): keine falsche Differenz
+  const r = await submitCount(user, L004.id, [{ articleId: wasser.id, state: "FULL", counted: expected, expected }], "");
   assert.ok(r.ok);
-  assert.equal(r.ok && r.changed, 0, "keine falsche Differenz");
+  assert.equal(r.ok && r.changed, 0, "keine falsche Differenz durch die Umlagerung");
   assert.equal(await q(wasser.id, L004.id, "FULL"), 15);
-  // Ohne Startzeit würde dieselbe Zählung fälschlich +5 buchen
-  const naive = await submitCount(user, L004.id, [{ articleId: wasser.id, state: "FULL", counted: 20 }], "");
-  assert.ok(naive.ok && naive.changed === 1);
-  assert.equal(await q(wasser.id, L004.id, "FULL"), 20);
+  // Zweites Szenario: Eine Lieferung wird während der Zählung storniert – „stimmt“ darf sie nicht wieder einbuchen
+  const delivery = await bookMovements(user, [{ kind: "RECEIPT", articleId: wasser.id, quantity: 50, toLocationId: L004.id }]);
+  assert.ok(delivery.ok);
+  const exp2 = await q(wasser.id, L004.id, "FULL"); // 65
+  if (delivery.ok) assert.ok((await voidMovement(user, delivery.ids[0], "falsch erfasst")).ok);
+  const r2 = await submitCount(user, L004.id, [{ articleId: wasser.id, state: "FULL", counted: exp2, expected: exp2 }], "");
+  assert.ok(r2.ok && r2.changed === 0, "Storno bleibt bestehen");
+  assert.equal(await q(wasser.id, L004.id, "FULL"), 15);
+  // Wirklich anders gezählt: 18 statt der erwarteten 15 → +3
+  const r3 = await submitCount(user, L004.id, [{ articleId: wasser.id, state: "FULL", counted: 18, expected: 15 }], "");
+  assert.ok(r3.ok && r3.changed === 1);
+  assert.equal(await q(wasser.id, L004.id, "FULL"), 18);
 });
 
 test("Inventur: einzelne Zeilen lassen sich zurücknehmen", async () => {
@@ -338,4 +345,82 @@ test("Inventur: einzelne Zeilen lassen sich zurücknehmen", async () => {
   const after = (await listInventories(L004.id)).find((x) => x.batchId === r.batchId)!;
   assert.equal(after.voided, false);
   assert.deepEqual(after.lines.map((l) => l.voided).sort(), [false, true]);
+});
+
+test("Kein Deadlock: gegenläufige Artikelreihenfolge parallel", async () => {
+  const { user, wasser, brot, L004 } = d;
+  await bookMovements(user, [{ kind: "ADJUST", articleId: wasser.id, quantity: 500, fromLocationId: L004.id, note: "Vorrat Test" }, { kind: "ADJUST", articleId: brot.id, quantity: 500, fromLocationId: L004.id, note: "Vorrat Test" }]);
+  const ab = [{ kind: "RECEIPT" as const, articleId: wasser.id, quantity: 1, toLocationId: L004.id }, { kind: "RECEIPT" as const, articleId: brot.id, quantity: 1, toLocationId: L004.id }];
+  const ba = [ab[1], ab[0]];
+  const w0 = await q(wasser.id, L004.id, "FULL");
+  const results = await Promise.all(Array.from({ length: 20 }, (_, i) => bookMovements(user, i % 2 ? ba : ab)));
+  assert.ok(results.every((r) => r.ok), "kein Deadlock-Absturz");
+  assert.equal(await q(wasser.id, L004.id, "FULL"), w0 + 20);
+});
+
+test("Gleichzeitig denselben neuen Artikel/Lieferanten anlegen: genau einer entsteht, alle Buchungen gelingen", async () => {
+  const { user, L004 } = d;
+  const mk = () => bookMovements(user, [{ kind: "RECEIPT", newArticle: { name: "Race-Apfelsaft", unit: "Kiste", returnable: false }, quantity: 2, toLocationId: L004.id, supplierName: "Race-Lieferant" }]);
+  const results = await Promise.all(Array.from({ length: 5 }, mk));
+  assert.ok(results.every((r) => r.ok), JSON.stringify(results.filter((r) => !r.ok)));
+  assert.equal(await prisma.article.count({ where: { name: "Race-Apfelsaft" } }), 1);
+  assert.equal(await prisma.supplier.count({ where: { name: "Race-Lieferant" } }), 1);
+});
+
+test("Plan: mehrfach gleichzeitig erledigen bucht genau einmal und hinterlässt keine Phantombuchungen", async () => {
+  const { user, wasser, L004, SH } = d;
+  await bookMovements(user, [{ kind: "ADJUST", articleId: wasser.id, quantity: 100, fromLocationId: L004.id, note: "Vorrat Plan-Test" }]);
+  const p = await createPlan(user, { articleId: wasser.id, quantity: 3, state: "FULL", fromLocationId: L004.id, toLocationId: SH.id, dueAt: new Date(Date.now() + 3600_000), phase: "Race", note: null });
+  assert.ok(p.ok);
+  if (!p.ok) return;
+  const before = await prisma.movement.count({ where: { articleId: wasser.id } });
+  const results = await Promise.all(Array.from({ length: 4 }, () => completePlan(user, p.id, false)));
+  assert.equal(results.filter((r) => r.ok).length, 1);
+  assert.equal(await prisma.movement.count({ where: { articleId: wasser.id } }), before + 1, "keine Phantombuchungen");
+  assert.equal(await prisma.movement.count({ where: { articleId: wasser.id, voidedAt: { not: null }, voidReason: { contains: "doppelt" } } }), 0);
+});
+
+test("Plan-Regeln: Leergut braucht einen Quellort; Ort archivieren sagt offene Pläne ab", async () => {
+  const { user, wasser, SH } = d;
+  const bad = await createPlan(user, { articleId: wasser.id, quantity: 1, state: "EMPTY", fromLocationId: null, toLocationId: SH.id, dueAt: new Date(Date.now() + 3600_000), phase: null, note: null });
+  assert.equal(bad.ok, false);
+  const { removeLocation, saveLocation } = await import("../../src/services/catalog.ts");
+  const loc = await saveLocation(user, null, { name: "Archiv-Test", code: null, parentId: null, kind: "ROOM", cooled: false, note: null, sortOrder: 0 });
+  assert.ok(loc.ok);
+  if (!loc.ok) return;
+  const plan = await createPlan(user, { articleId: wasser.id, quantity: 1, state: "FULL", fromLocationId: null, toLocationId: loc.id, dueAt: new Date(Date.now() + 3600_000), phase: null, note: null });
+  assert.ok(plan.ok);
+  assert.ok((await removeLocation(user, loc.id, "archive")).ok);
+  if (plan.ok) assert.equal((await prisma.plan.findUniqueOrThrow({ where: { id: plan.id } })).status, "CANCELLED");
+});
+
+test("Letzter Administrator: zwei Admins stufen sich gleichzeitig herab – mindestens einer bleibt", async () => {
+  const { setRole } = await import("../../src/services/users.ts");
+  const a = await prisma.user.create({ data: { email: "ra@x.de", normalizedEmail: "ra@x.de", displayName: "RA", role: "ADMIN", status: "ACTIVE" } });
+  const b = await prisma.user.create({ data: { email: "rb@x.de", normalizedEmail: "rb@x.de", displayName: "RB", role: "ADMIN", status: "ACTIVE" } });
+  await prisma.user.updateMany({ where: { role: "ADMIN", id: { notIn: [a.id, b.id] } }, data: { role: "MEMBER" } });
+  for (let i = 0; i < 10; i++) {
+    await prisma.user.updateMany({ where: { id: { in: [a.id, b.id] } }, data: { role: "ADMIN", status: "ACTIVE" } });
+    await Promise.all([setRole(a, b.id, "MEMBER"), setRole(b, a.id, "MEMBER")]);
+    assert.ok((await prisma.user.count({ where: { role: "ADMIN", status: { not: "DEACTIVATED" } } })) >= 1, `Lauf ${i}: niemand ist mehr Administrator`);
+  }
+});
+
+test("Datenbank erzwingt die Buchungsregeln und schützt Buchungen vor nachträglicher Änderung", async () => {
+  const { user, wasser, L004, SH } = d;
+  const r = await bookMovements(user, [{ kind: "RECEIPT", articleId: wasser.id, quantity: 1, toLocationId: L004.id }]);
+  assert.ok(r.ok);
+  if (!r.ok) return;
+  const id = r.ids[0];
+  await assert.rejects(prisma.movement.update({ where: { id }, data: { quantity: 99 } }), /unveränderlich/i);
+  await assert.rejects(prisma.movement.update({ where: { id }, data: { toLocationId: SH.id } }), /unveränderlich/i);
+  // falsche Form: Eingang mit Zustand „leer“, Umlagerung mit ungleichem Zustand, Verbrauch ohne Quelle
+  const base = { articleId: wasser.id, createdById: user.id };
+  await assert.rejects(prisma.movement.create({ data: { ...base, kind: "RECEIPT", quantity: 1, toLocationId: L004.id, toState: "EMPTY" } }), /movements_kind_shape|check/i);
+  await assert.rejects(prisma.movement.create({ data: { ...base, kind: "TRANSFER", quantity: 1, fromLocationId: L004.id, fromState: "FULL", toLocationId: SH.id, toState: "EMPTY" } }), /movements_kind_shape|check/i);
+  await assert.rejects(prisma.movement.create({ data: { ...base, kind: "CONSUME", quantity: 1, toLocationId: L004.id, toState: "FULL" } }), /movements_kind_shape|check/i);
+  // stornieren geht (nur Storno-Spalten), aber ohne Grund nicht, und rückgängig machen nicht
+  await assert.rejects(prisma.movement.update({ where: { id }, data: { voidedAt: new Date(), voidedById: user.id } }), /movements_void_reason|check/i);
+  assert.ok((await voidMovement(user, id, "Test")).ok);
+  await assert.rejects(prisma.movement.update({ where: { id }, data: { voidedAt: null, voidedById: null, voidReason: null } }), /storniert bleibt|check/i);
 });

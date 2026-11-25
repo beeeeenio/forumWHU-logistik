@@ -2,13 +2,19 @@ import "server-only";
 import { prisma } from "@/db/prisma";
 import type { User } from "@/generated/prisma/client";
 import type { StockState } from "@/lib/domain/rules";
-import { MAX_QUANTITY, STATE_LABEL, movementDeltas } from "@/lib/domain/rules";
+import { MAX_QUANTITY, STATE_LABEL } from "@/lib/domain/rules";
 import { fmtDate } from "@/lib/time";
 import { audit } from "./audit";
-import { bookMovements, type BookInput } from "./movements";
+import { BookingRollback, bookInTx, isRetryable, type BookInput } from "./movements";
 import { stockRows } from "./stock";
 
-export interface CountRow { articleId: string; state: StockState; counted: number }
+export interface CountRow {
+  articleId: string;
+  state: StockState;
+  counted: number;
+  /** Bestand, den die Person beim Öffnen der Zählung gesehen hat (Basis der Differenz). Ohne Angabe: der aktuelle Bestand. */
+  expected?: number;
+}
 export type InventoryResult =
   | { ok: true; changed: number; same: number; lines: string[]; batchId: string | null }
   | { ok: false; error: string };
@@ -17,57 +23,64 @@ export type InventoryResult =
  * Inventur eines Ortes: gezählte Mengen → nur die Abweichungen werden als Korrekturen gebucht, alle in EINER Transaktion
  * (entweder die ganze Zählung oder nichts). Zeilen, die stimmen, bleiben unberührt.
  *
- * `startedAt` = Beginn der Zählung. Wurde währenddessen am selben Ort umgelagert, verbraucht oder eingelagert, wird das herausgerechnet:
- * Gezählt wurde der Stand zum Zählbeginn, gebucht wird „gezählt + Bewegungen seitdem“. So erzeugt eine Zählung, die lange dauert,
- * keine falschen Differenzen.
+ * Gezählt wurde der Stand zum Zählbeginn (`expected` = was die Person beim Öffnen gesehen hat). Hat sich der Bestand seitdem durch
+ * andere Buchungen oder Stornos geändert, wird das herausgerechnet: gebucht wird „gezählt + Änderung seitdem“. So macht eine
+ * Zählung, die lange dauert, weder parallele Lieferungen noch Stornos rückgängig. Gerechnet wird innerhalb der Transaktion nach den
+ * Artikel-Sperren, also auf dem tatsächlich aktuellen Stand.
  */
-export async function submitCount(user: User, locationId: string, rows: CountRow[], note: string, startedAt: Date | null = null): Promise<InventoryResult> {
+export async function submitCount(user: User, locationId: string, rows: CountRow[], note: string): Promise<InventoryResult> {
   const loc = await prisma.location.findUnique({ where: { id: locationId } });
   if (!loc || loc.archivedAt) return { ok: false, error: "Dieser Ort existiert nicht mehr oder ist archiviert." };
   if (!rows.length) return { ok: false, error: "Es wurde nichts gezählt." };
   const seen = new Set<string>();
   for (const r of rows) {
     if (!Number.isInteger(r.counted) || r.counted < 0 || r.counted > MAX_QUANTITY) return { ok: false, error: "Gezählte Mengen müssen ganze Zahlen von 0 bis " + MAX_QUANTITY.toLocaleString("de-DE") + " sein." };
+    if (r.expected !== undefined && (!Number.isInteger(r.expected) || Math.abs(r.expected) > MAX_QUANTITY)) return { ok: false, error: "Ungültiger Ausgangsbestand." };
     const k = r.articleId + r.state;
     if (seen.has(k)) return { ok: false, error: "Eine Zeile kommt doppelt vor." };
     seen.add(k);
   }
-  const [stock, articles] = await Promise.all([
-    stockRows(prisma, { locationId }),
-    prisma.article.findMany({ where: { id: { in: rows.map((r) => r.articleId) } } }),
-  ]);
+  const articles = await prisma.article.findMany({ where: { id: { in: rows.map((r) => r.articleId) } } });
   const byId = new Map(articles.map((a) => [a.id, a]));
-  // Bewegungen seit Zählbeginn an diesem Ort (ohne Korrekturen): höchstens 12 Stunden zurück, nie aus der Zukunft
-  const now = Date.now();
-  const since = startedAt && startedAt.getTime() <= now && startedAt.getTime() > now - 12 * 3600_000 ? startedAt : null;
-  const drift = new Map<string, number>();
-  if (since) {
-    const moved = await prisma.movement.findMany({
-      where: { createdAt: { gt: since }, voidedAt: null, kind: { not: "ADJUST" }, articleId: { in: rows.map((r) => r.articleId) }, OR: [{ fromLocationId: locationId }, { toLocationId: locationId }] },
-    });
-    for (const m of moved) for (const d of movementDeltas(m)) if (d.locationId === locationId) drift.set(d.articleId + d.state, (drift.get(d.articleId + d.state) ?? 0) + d.quantity);
-  }
-  const inputs: BookInput[] = [];
-  const lines: string[] = [];
-  let same = 0;
-  const why = `Inventur ${loc.name} ${fmtDate(new Date())}${note.trim() ? ` – ${note.trim().slice(0, 200)}` : ""}`;
   for (const r of rows) {
     const a = byId.get(r.articleId);
     if (!a || a.archivedAt) return { ok: false, error: "Ein Artikel existiert nicht mehr oder ist archiviert." };
     if (r.state === "EMPTY" && !a.returnable) return { ok: false, error: `${a.name} hat kein Leergut.` };
-    const current = stock.find((s) => s.articleId === r.articleId && s.state === r.state)?.quantity ?? 0;
-    const moved = drift.get(r.articleId + r.state) ?? 0;
-    const target = Math.max(0, r.counted + moved);
-    if (current === target) { same++; continue; }
-    inputs.push({ kind: "ADJUST", articleId: r.articleId, quantity: target, fromLocationId: locationId, state: r.state, note: why, source: "inventory" });
-    const diff = target - current;
-    lines.push(`${a.name}${a.returnable ? (r.state === "FULL" ? " (voll)" : " (leer)") : ""}: ${current} → ${target} (${diff > 0 ? "+" : ""}${diff})${moved ? ` · inkl. ${moved > 0 ? "+" : ""}${moved} Bewegung seit Zählbeginn` : ""}`);
   }
-  if (!inputs.length) return { ok: true, changed: 0, same, lines: [], batchId: null };
+  const why = `Inventur ${loc.name} ${fmtDate(new Date())}${note.trim() ? ` – ${note.trim().slice(0, 200)}` : ""}`;
   const batchId = crypto.randomUUID();
-  const res = await bookMovements(user, inputs, { batchId });
-  if (!res.ok) return { ok: false, error: res.error };
-  return { ok: true, changed: inputs.length, same, lines, batchId };
+  try {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await prisma.$transaction(async (tx): Promise<InventoryResult> => {
+          for (const id of [...new Set(rows.map((r) => r.articleId))].sort()) await tx.$executeRaw`select pg_advisory_xact_lock(hashtextextended(${id}, 0))`;
+          const stock = await stockRows(tx, { locationId });
+          const inputs: BookInput[] = [];
+          const lines: string[] = [];
+          let same = 0;
+          for (const r of rows) {
+            const a = byId.get(r.articleId)!;
+            const current = stock.find((x) => x.articleId === r.articleId && x.state === r.state)?.quantity ?? 0;
+            const moved = r.expected === undefined ? 0 : current - r.expected;
+            const target = Math.max(0, r.counted + moved);
+            if (current === target) { same++; continue; }
+            inputs.push({ kind: "ADJUST", articleId: r.articleId, quantity: target, fromLocationId: locationId, state: r.state, note: why, source: "inventory" });
+            const diff = target - current;
+            lines.push(`${a.name}${a.returnable ? (r.state === "FULL" ? " (voll)" : " (leer)") : ""}: ${current} → ${target} (${diff > 0 ? "+" : ""}${diff})${moved ? ` · inkl. ${moved > 0 ? "+" : ""}${moved} Änderung seit Zählbeginn` : ""}`);
+          }
+          if (!inputs.length) return { ok: true, changed: 0, same, lines: [], batchId: null };
+          await bookInTx(tx, user, inputs, batchId);
+          return { ok: true, changed: inputs.length, same, lines, batchId };
+        }, { timeout: 60_000 });
+      } catch (e) {
+        if (attempt < 2 && isRetryable(e)) { await new Promise((r) => setTimeout(r, 50 + Math.random() * 100)); continue; }
+        throw e;
+      }
+    }
+  } catch (e) {
+    if (e instanceof BookingRollback) return { ok: false, error: e.message };
+    throw e;
+  }
 }
 
 // ── Verlauf und Zurücknehmen ────────────────────────────────────────────────────────────────────────────────────────────────

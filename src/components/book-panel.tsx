@@ -40,6 +40,16 @@ export interface Draft {
   warnings: string[];
 }
 
+/** Auswahlgruppe per Tastatur: Pfeile wechseln den Wert (wie eine echte Radiogruppe), nur der aktive Knopf ist ein Tab-Stopp. */
+function arrowKeys(e: React.KeyboardEvent<HTMLButtonElement>, index: number, count: number, pick: (i: number) => void) {
+  const dir = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 0;
+  if (!dir) return;
+  e.preventDefault();
+  const next = (index + dir + count) % count;
+  pick(next);
+  (e.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="radio"]')[next])?.focus();
+}
+
 let counter = 0;
 export const blankDraft = (over: Partial<Draft> = {}): Draft => ({
   key: `d${++counter}`, kind: "RECEIPT", articleId: "", newName: "", newUnit: "Stück", newReturnable: false, quantity: "", from: "", to: "", state: "FULL", supplier: "", note: "", when: "", source: "ui", warnings: [], ...over,
@@ -59,6 +69,7 @@ function QuickEntry({ catalog, onDrafts }: { catalog: BookCatalog; onDrafts: (d:
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [listening, setListening] = useState(false);
+  const [open, setOpen] = useState(false);
   const [canListen, setCanListen] = useState(false);
   const rec = useRef<SpeechRec | null>(null);
   useEffect(() => {
@@ -113,21 +124,24 @@ function QuickEntry({ catalog, onDrafts }: { catalog: BookCatalog; onDrafts: (d:
       });
     });
     onDrafts(drafts);
+    setOpen(false);
   }
 
   return (
-    <section className="card space-y-3 p-4">
-      <div className="flex items-center gap-2"><Sparkles className="size-5 text-heading" /><h2 className="text-lg">Schnell erfassen</h2></div>
+    <details className="card p-4" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
+      <summary className="flex items-center gap-2"><Sparkles className="size-5 text-heading" /><span className="font-heading text-lg text-heading">Per Text oder Diktat erfassen</span><span className="ml-auto text-xs text-muted-foreground">{open ? "zuklappen" : "aufklappen"}</span></summary>
+      <div className="mt-3 space-y-3">
       <p className="text-sm text-muted-foreground">Schreib oder diktier einfach, was passiert ist – eine Zeile pro Buchung. Unten kannst du alles prüfen und ändern, bevor gebucht wird.</p>
       <textarea value={text} onChange={(e) => setText(e.target.value)} rows={3} className="field" aria-label="Schnellerfassung"
         placeholder={"Staatlich Fachingen, 46 Kisten Mineralwasser in L004\n46 Kisten Mineralwasser von L004 nach Stadthalle Kühlanhänger\n20 Kisten Mineralwasser leer in Stadthalle"} />
       <div className="flex flex-wrap items-center gap-2">
-        <button type="button" onClick={parse} disabled={busy || !text.trim()} className="btn-primary">{busy ? "Lese …" : "Zeilen erkennen"}</button>
+        <button type="button" onClick={parse} disabled={busy || !text.trim()} className="btn-primary">{busy ? "Lese …" : "In Buchungen umwandeln"}</button>
         {canListen && <button type="button" onClick={toggleMic} className={cn("btn-secondary", listening && "border-danger text-danger")} aria-pressed={listening}><Mic className="size-4" />{listening ? "Hört zu … (Stopp)" : "Diktieren"}</button>}
         {text && <button type="button" onClick={() => setText("")} className="text-sm text-muted-foreground underline">leeren</button>}
       </div>
       {error && <p role="alert" className="rounded-xl bg-danger/10 p-3 text-sm text-danger">{error}</p>}
-    </section>
+      </div>
+    </details>
   );
 }
 
@@ -163,8 +177,8 @@ function DraftEditor({ d, index, total, catalog, set, remove }: { d: Draft; inde
     <div className="card space-y-4 p-4" aria-label={`Buchung ${index + 1}`}>
       <div className="flex items-start justify-between gap-2">
         <div role="radiogroup" aria-label="Art der Buchung" className="grid flex-1 grid-cols-3 gap-1.5 sm:grid-cols-6">
-          {MOVEMENT_KINDS.map((k) => (
-            <button key={k} type="button" role="radio" aria-checked={d.kind === k} onClick={() => set({ kind: k, state: k === "RETURN" ? "EMPTY" : k === "CONSUME" || k === "RECEIPT" ? "FULL" : d.state })}
+          {MOVEMENT_KINDS.map((k, ki) => (
+            <button key={k} type="button" role="radio" aria-checked={d.kind === k} tabIndex={d.kind === k ? 0 : -1} onKeyDown={(e) => arrowKeys(e, ki, MOVEMENT_KINDS.length, (i) => set({ kind: MOVEMENT_KINDS[i], state: MOVEMENT_KINDS[i] === "RETURN" ? "EMPTY" : MOVEMENT_KINDS[i] === "CONSUME" || MOVEMENT_KINDS[i] === "RECEIPT" ? "FULL" : d.state }))} onClick={() => set({ kind: k, state: k === "RETURN" ? "EMPTY" : k === "CONSUME" || k === "RECEIPT" ? "FULL" : d.state })}
               className={cn("min-h-11 rounded-xl border px-1.5 text-xs font-medium leading-tight transition-colors", d.kind === k ? "border-transparent bg-navy text-white dark:bg-primary dark:text-primary-foreground" : "bg-card text-heading hover:bg-muted")}>
               {KIND_LABEL[k]}
             </button>
@@ -199,18 +213,18 @@ function DraftEditor({ d, index, total, catalog, set, remove }: { d: Draft; inde
         <div>
           <span className="label">{d.kind === "ADJUST" ? "Gezählt (neuer Bestand)" : "Menge"}{unit ? ` · ${unit}` : ""}</span>
           <div className="flex items-center gap-2">
-            <button type="button" className="btn-secondary w-11 px-0" aria-label="Weniger" onClick={() => set({ quantity: String(Math.max((Number.isFinite(qty) ? qty : 1) - 1, d.kind === "ADJUST" ? 0 : 1)) })}><Minus className="size-4" /></button>
+            <button type="button" className="btn-secondary w-12 px-0" aria-label="Weniger" onClick={() => set({ quantity: String(Math.max((Number.isFinite(qty) ? qty : 1) - 1, d.kind === "ADJUST" ? 0 : 1)) })}><Minus className="size-4" /></button>
             <input value={d.quantity} onChange={(e) => set({ quantity: e.target.value.replace(/[^\d]/g, "") })} inputMode="numeric" pattern="[0-9]*" className="field text-center text-lg font-semibold tabular-nums" aria-label="Menge" placeholder="0" />
-            <button type="button" className="btn-secondary w-11 px-0" aria-label="Mehr" onClick={() => set({ quantity: String((Number.isFinite(qty) ? qty : 0) + 1) })}><Plus className="size-4" /></button>
+            <button type="button" className="btn-secondary w-12 px-0" aria-label="Mehr" onClick={() => set({ quantity: String((Number.isFinite(qty) ? qty : 0) + 1) })}><Plus className="size-4" /></button>
           </div>
         </div>
 
         {showState && (
           <div>
             <span className="label">Zustand</span>
-            <div role="radiogroup" className="grid grid-cols-2 gap-1.5">
-              {(["FULL", "EMPTY"] as const).map((s) => (
-                <button key={s} type="button" role="radio" aria-checked={d.state === s} onClick={() => set({ state: s })} className={cn("min-h-11 rounded-xl border text-sm font-medium", d.state === s ? "border-transparent bg-navy text-white dark:bg-primary dark:text-primary-foreground" : "bg-card text-heading hover:bg-muted")}>{STATE_LABEL[s]}</button>
+            <div role="radiogroup" aria-label="Zustand" className="grid grid-cols-2 gap-1.5">
+              {(["FULL", "EMPTY"] as const).map((s, si) => (
+                <button key={s} type="button" role="radio" aria-checked={d.state === s} tabIndex={d.state === s ? 0 : -1} onKeyDown={(e) => arrowKeys(e, si, 2, (i) => set({ state: i === 0 ? "FULL" : "EMPTY" }))} onClick={() => set({ state: s })} className={cn("min-h-11 rounded-xl border text-sm font-medium", d.state === s ? "border-transparent bg-navy text-white dark:bg-primary dark:text-primary-foreground" : "bg-card text-heading hover:bg-muted")}>{STATE_LABEL[s]}</button>
               ))}
             </div>
           </div>
@@ -237,7 +251,7 @@ function DraftEditor({ d, index, total, catalog, set, remove }: { d: Draft; inde
 
       {have !== null && (
         <p className={cn("text-sm", short ? "text-warn" : "text-muted-foreground")}>
-          {short && <TriangleAlert className="mr-1 inline size-4" />}Dort sind gerade {fmtQty(have, unit)} {returnable ? STATE_LABEL[fromState] : ""} gebucht{short ? " – das reicht nicht für diese Menge." : "."}
+          {short && <TriangleAlert className="mr-1 inline size-4" />}Dort sind {fmtQty(have, unit)} {returnable ? STATE_LABEL[fromState] : ""} gebucht{short ? " – das reicht nicht für diese Menge." : "."}
         </p>
       )}
       {after.length > 0 && (
@@ -264,6 +278,7 @@ export function BookPanel({ catalog, initial }: { catalog: BookCatalog; initial:
   const lastNonce = useRef<number | undefined>(undefined);
   // Kennung dieser Erfassung: bleibt bei Doppeltipp/Wiederholung gleich (bucht nie zweimal), neu nach jeder Änderung und nach Erfolg
   const keyRef = useRef<string | null>(null);
+  const successRef = useRef<HTMLDivElement>(null);
   const [undoRes, setUndoRes] = useState<ActionResult | null>(null);
   const [undoing, setUndoing] = useState(false);
 
@@ -273,6 +288,8 @@ export function BookPanel({ catalog, initial }: { catalog: BookCatalog; initial:
       lastNonce.current = result.nonce;
       keyRef.current = null;
       setUndoRes(null);
+      // Die Bestätigung steht oben, der Buchen-Knopf unten: nach oben holen, damit man sie sicher sieht
+      requestAnimationFrame(() => successRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
       setDrafts((cur) => [blankDraft({ kind: cur[0]?.kind ?? "RECEIPT" })]);
       setForce(false);
     }
@@ -296,7 +313,17 @@ export function BookPanel({ catalog, initial }: { catalog: BookCatalog; initial:
   }), [drafts, force]);
 
   const patch = (key: string, p: Partial<Draft>) => { keyRef.current = null; setDrafts((cur) => cur.map((d) => (d.key === key ? { ...d, ...p, warnings: p.warnings ?? d.warnings } : d))); };
-  const ready = drafts.every((d) => Number.isFinite(parseInt(d.quantity, 10)) && (d.articleId && (d.articleId !== "__new" || d.newName.trim().length >= 2)));
+  // Was fehlt noch? (statt den Knopf ohne Erklärung zu sperren)
+  const missing = [...new Set(drafts.flatMap((d, i) => {
+    const row = drafts.length > 1 ? `Zeile ${i + 1}: ` : "";
+    const m: string[] = [];
+    if (!d.articleId) m.push("Artikel"); else if (d.articleId === "__new" && d.newName.trim().length < 2) m.push("Name des neuen Artikels");
+    if (!Number.isFinite(parseInt(d.quantity, 10))) m.push(d.kind === "ADJUST" ? "gezählte Menge" : "Menge");
+    if (d.kind !== "RECEIPT" && !d.from) m.push("Ort");
+    if ((d.kind === "RECEIPT" || d.kind === "TRANSFER") && !d.to) m.push("Zielort");
+    return m.map((x) => row + x);
+  }))];
+  const ready = missing.length === 0;
 
   const unusualAny = drafts.some((d) => { const a = catalog.articles.find((x) => x.id === d.articleId); return Boolean(a && unusualQuantity(parseInt(d.quantity, 10), catalog.typical[a.id])); });
 
@@ -321,7 +348,7 @@ export function BookPanel({ catalog, initial }: { catalog: BookCatalog; initial:
       <QuickEntry catalog={catalog} onDrafts={(d) => { setDrafts(d.length ? d : [blankDraft()]); setForce(false); }} />
 
       {result?.ok && (
-        <div role="status" className="rounded-2xl border border-ok/40 bg-ok/10 p-4 text-ok">
+        <div ref={successRef} role="status" className="scroll-mt-20 rounded-2xl border border-ok/40 bg-ok/10 p-4 text-ok">
           <p className="flex items-center gap-2 font-medium"><Check className="size-5" />{result.message}</p>
           <ul className="mt-1 list-inside list-disc text-sm">{result.lines?.map((l, i) => <li key={i}>{l}</li>)}</ul>
           <p className="mt-2 text-sm"><Link href="/journal" className="underline">Im Journal ansehen</Link> · <Link href="/" className="underline">Zur Lage</Link></p>
@@ -349,8 +376,9 @@ export function BookPanel({ catalog, initial }: { catalog: BookCatalog; initial:
         </div>
       )}
 
-      <div className="sticky bottom-[calc(var(--tabbar-h)+env(safe-area-inset-bottom)+0.5rem)] z-10 md:bottom-4">
-        <button type="button" onClick={() => submit(false)} disabled={pending || !ready} className="btn-primary w-full min-h-12 text-base shadow-soft">
+      <div className="sticky bottom-[calc(var(--tabbar-h)+env(safe-area-inset-bottom))] z-10 -mx-4 space-y-1 border-t bg-background/95 px-4 py-2 backdrop-blur md:static md:mx-0 md:border-0 md:bg-transparent md:p-0 md:backdrop-blur-none">
+        {!ready && <p className="text-xs text-muted-foreground" aria-live="polite">Es fehlen noch: {missing.slice(0, 4).join(", ")}{missing.length > 4 ? " …" : ""}</p>}
+        <button type="button" onClick={() => submit(false)} disabled={pending || !ready} className="btn-primary min-h-12 w-full text-base shadow-soft disabled:border-border disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100 disabled:shadow-none">
           {pending ? "Buche …" : drafts.length > 1 ? `Alle ${drafts.length} Zeilen buchen` : "Buchen"}
         </button>
       </div>

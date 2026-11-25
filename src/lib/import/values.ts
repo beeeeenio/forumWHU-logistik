@@ -14,14 +14,16 @@ export function parseBool(v: string): boolean | undefined {
   return undefined;
 }
 
-/** Ganze Zahl ≥ 0 aus „46“, „46,0“, „1.200“, „12 Kisten“; leer/unklar → null. */
+/** Ganze Zahl aus „46“, „46,0“, „1.200“, „12 Kisten“. Nicht ganzzahlige Werte („2,5“, „0,4“) und Exponenten („1e3“) ergeben null – nie still gerundet. */
 export function parseInteger(v: string): number | null {
-  const m = v.replace(/ /g, " ").trim().match(/^-?\d{1,3}(?:[.\s]\d{3})+(?:,\d+)?|^-?\d+(?:[.,]\d+)?/);
+  const t = v.replace(/\u00a0/g, " ").trim();
+  if (/^-?\d+(?:[.,]\d+)?\s*[eE][+-]?\d/.test(t)) return null;
+  const m = t.match(/^-?\d{1,3}(?:[.\s]\d{3})+(?:,\d+)?|^-?\d+(?:[.,]\d+)?/);
   if (!m) return null;
   let s = m[0].replace(/\s/g, "");
   if (/^-?\d{1,3}(\.\d{3})+(,\d+)?$/.test(s)) s = s.replace(/\./g, ""); // 1.200 → 1200
   const n = Number(s.replace(",", "."));
-  if (!Number.isFinite(n)) return null;
+  if (!Number.isFinite(n) || Math.abs(n - Math.round(n)) > 1e-9) return null;
   return Math.round(n);
 }
 

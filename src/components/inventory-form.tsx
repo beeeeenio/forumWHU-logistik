@@ -13,7 +13,7 @@ export interface InvRow { articleId: string; name: string; unit: string; returna
 export interface InvArticle { id: string; name: string; unit: string; returnable: boolean }
 
 /** Zählliste eines Ortes: Zahl eintragen (oder „stimmt“ tippen), nur Abweichungen werden gebucht. */
-export function InventoryForm({ locationId, locationName, initial, articles, startedAt }: { locationId: string; locationName: string; initial: InvRow[]; articles: InvArticle[]; startedAt: string }) {
+export function InventoryForm({ locationId, locationName, initial, articles }: { locationId: string; locationName: string; initial: InvRow[]; articles: InvArticle[] }) {
   const [rows, setRows] = useState<InvRow[]>(initial);
   const [counts, setCounts] = useState<Record<string, string>>({});
   const [note, setNote] = useState("");
@@ -35,7 +35,7 @@ export function InventoryForm({ locationId, locationName, initial, articles, sta
 
   function submit() {
     const fd = new FormData();
-    fd.set("payload", JSON.stringify({ locationId, note, startedAt, rows: entered.map((r) => ({ articleId: r.articleId, state: r.state, counted: parseInt(counts[key(r)], 10) })) }));
+    fd.set("payload", JSON.stringify({ locationId, note, rows: entered.map((r) => ({ articleId: r.articleId, state: r.state, counted: parseInt(counts[key(r)], 10), expected: r.current })) }));
     startTransition(() => formAction(fd));
   }
 

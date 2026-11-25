@@ -4,7 +4,7 @@ import type { User } from "@/generated/prisma/client";
 import type { StockState } from "@/lib/domain/rules";
 import { validQuantity } from "@/lib/domain/rules";
 import { audit } from "./audit";
-import { bookMovements, type BookResult } from "./movements";
+import { BookingRollback, bookInTx, isRetryable, type BookResult } from "./movements";
 
 export interface PlanInput {
   articleId: string;
@@ -31,6 +31,7 @@ export async function createPlan(user: User, p: PlanInput): Promise<PlanResult> 
   if (!to || to.archivedAt) return { ok: false, error: "Zielort nicht gefunden." };
   if (p.fromLocationId && (!from || from.archivedAt)) return { ok: false, error: "Quellort nicht gefunden." };
   if (p.state === "EMPTY" && !article.returnable) return { ok: false, error: "Dieser Artikel hat kein Leergut." };
+  if (p.state === "EMPTY" && !p.fromLocationId) return { ok: false, error: "Leergut kann nur aus einem Ort heraus geplant werden – bitte den Quellort wählen." };
   const plan = await prisma.plan.create({
     data: { ...p, phase: p.phase?.trim() || null, note: p.note?.trim() || null, createdById: user.id },
   });
@@ -38,31 +39,44 @@ export async function createPlan(user: User, p: PlanInput): Promise<PlanResult> 
   return { ok: true, id: plan.id };
 }
 
-/** Erledigt einen Plan, indem die geplante Umlagerung (bzw. der Eingang) gebucht wird. */
+/**
+ * Erledigt einen Plan, indem die geplante Umlagerung (bzw. der Eingang) gebucht wird – in EINER Transaktion: Plan sperren, prüfen,
+ * buchen, verknüpfen. Zwei gleichzeitige „Erledigt“ buchen nie doppelt, und ein Abbruch dazwischen hinterlässt keine halbe Buchung.
+ */
 export async function completePlan(user: User, planId: string, force: boolean): Promise<BookResult> {
-  const plan = await prisma.plan.findUnique({ where: { id: planId } });
-  if (!plan) return { ok: false, code: "INVALID", error: "Plan nicht gefunden." };
-  if (plan.status !== "OPEN") return { ok: false, code: "INVALID", error: "Dieser Plan ist schon erledigt oder abgesagt." };
-  const booked = await bookMovements(user, [{
-    kind: plan.fromLocationId ? "TRANSFER" : "RECEIPT",
-    articleId: plan.articleId,
-    quantity: plan.quantity,
-    fromLocationId: plan.fromLocationId,
-    toLocationId: plan.toLocationId,
-    state: plan.state,
-    note: plan.phase ? `Plan: ${plan.phase}` : "Plan erledigt",
-    source: "plan",
-    force,
-  }]);
-  if (!booked.ok) return booked;
-  // Verknüpfen; wenn zwischenzeitlich jemand anderes denselben Plan erledigt hat, wird die doppelte Buchung storniert.
-  const { count } = await prisma.plan.updateMany({ where: { id: plan.id, status: "OPEN" }, data: { status: "DONE", doneMovementId: booked.ids[0] } });
-  if (count !== 1) {
-    await prisma.movement.update({ where: { id: booked.ids[0] }, data: { voidedAt: new Date(), voidedById: user.id, voidReason: "Plan war bereits erledigt (doppelt)" } });
-    return { ok: false, code: "INVALID", error: "Jemand anderes hat diesen Plan gerade erledigt – deine doppelte Buchung wurde wieder storniert." };
+  try {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const done = await prisma.$transaction(async (tx): Promise<BookResult> => {
+          const locked = await tx.$queryRaw<{ status: string }[]>`select status::text as status from plans where id = ${planId}::uuid for update`;
+          if (!locked.length) return { ok: false, code: "INVALID", error: "Plan nicht gefunden." };
+          if (locked[0].status !== "OPEN") return { ok: false, code: "INVALID", error: "Dieser Plan ist schon erledigt oder abgesagt (jemand anderes war schneller)." };
+          const plan = await tx.plan.findUniqueOrThrow({ where: { id: planId } });
+          const r = await bookInTx(tx, user, [{
+            kind: plan.fromLocationId ? "TRANSFER" : "RECEIPT",
+            articleId: plan.articleId,
+            quantity: plan.quantity,
+            fromLocationId: plan.fromLocationId,
+            toLocationId: plan.toLocationId,
+            state: plan.state,
+            note: plan.phase ? `Plan: ${plan.phase}` : "Plan erledigt",
+            source: "plan",
+            force,
+          }], null);
+          await tx.plan.update({ where: { id: plan.id }, data: { status: "DONE", doneMovementId: r.ids[0] } });
+          await audit("plan.done", { userId: user.id, entity: "plan", entityId: plan.id }, tx);
+          return { ok: true, ids: r.ids, warnings: r.warnings };
+        }, { timeout: 20_000 });
+        return done;
+      } catch (e) {
+        if (attempt < 2 && isRetryable(e)) { await new Promise((r) => setTimeout(r, 50 + Math.random() * 100)); continue; }
+        throw e;
+      }
+    }
+  } catch (e) {
+    if (e instanceof BookingRollback) return e.result;
+    throw e;
   }
-  await audit("plan.done", { userId: user.id, entity: "plan", entityId: plan.id }, prisma);
-  return booked;
 }
 
 export async function cancelPlan(user: User, planId: string): Promise<{ ok: boolean; error?: string }> {

@@ -224,26 +224,9 @@ async function planLocations(c: Ctx): Promise<PlanResult> {
 }
 
 // ── Bestand ───────────────────────────────────────────────────────────────────────────────────────────────────────────────
-interface StockEntry { rows: string[]; article: string; location: string; state: StockState; qty: number; unit: string; category: string }
+interface StockEntry { rows: string[]; article: string; location: string; state: StockState; qty: number; unit: string; category: string; art?: { id: string; name: string; returnable: boolean }; loc?: { id: string; name: string } }
 async function planStock(c: Ctx): Promise<PlanResult | { error: string }> {
   const rep = newReport("stock", c.rows.length);
-  const entries = new Map<string, StockEntry>();
-  for (const r of c.rows) {
-    const article = c.get(r, "article"), location = c.get(r, "location"), rawQty = c.get(r, "quantity");
-    if (!article) { line(rep, r.label, "übersprungen", "kein Artikel"); continue; }
-    if (!location) { line(rep, r.label, "übersprungen", `${article}: kein Lagerort`); continue; }
-    if (!rawQty) { line(rep, r.label, "übersprungen", `${article}: keine Menge`); continue; }
-    const qty = parseInteger(rawQty);
-    if (qty === null) { line(rep, r.label, "übersprungen", `${article}: Menge „${rawQty}“ nicht lesbar`); continue; }
-    if (qty < 0) { line(rep, r.label, "übersprungen", `${article}: negative Menge`); continue; }
-    const state: StockState = parseState(c.get(r, "state")) ?? "FULL";
-    const key = `${lower(article)}|${codeKey(location)}|${state}`;
-    const ex = entries.get(key);
-    if (ex) { ex.qty += qty; ex.rows.push(r.label); line(rep, r.label, "Hinweis", `${article} / ${location}: mehrfach in der Datei – Mengen werden addiert`); continue; }
-    entries.set(key, { rows: [r.label], article, location, state, qty, unit: c.get(r, "unit"), category: c.get(r, "category") });
-  }
-  if (entries.size > MAX_STOCK_ENTRIES) return { error: `Zu viele Positionen (${entries.size}); bitte höchstens ${MAX_STOCK_ENTRIES} je Import.` };
-
   const [articles, locations, stock] = await Promise.all([c.db.article.findMany({ where: { archivedAt: null } }), c.db.location.findMany({ where: { archivedAt: null } }), stockRows(c.db)]);
   const artByName = new Map<string, (typeof articles)[number]>();
   for (const a of articles) { artByName.set(lower(a.name), a); for (const al of a.aliases) if (!artByName.has(lower(al))) artByName.set(lower(al), a); }
@@ -252,14 +235,34 @@ async function planStock(c: Ctx): Promise<PlanResult | { error: string }> {
   for (const l of locations) (locByName.get(lower(l.name)) ?? locByName.set(lower(l.name), []).get(lower(l.name))!).push(l);
   const findLoc = (t: string) => locByCode.get(codeKey(t)) ?? (locByName.get(lower(t))?.length === 1 ? locByName.get(lower(t))![0] : undefined);
 
+  // Gruppiert wird nach dem AUFGELÖSTEN Artikel/Ort: „Wasser“ und der Alias „Sprudel“ derselben Ware sind eine Position
+  const entries = new Map<string, StockEntry>();
+  for (const r of c.rows) {
+    const article = c.get(r, "article"), location = c.get(r, "location"), rawQty = c.get(r, "quantity");
+    if (!article) { line(rep, r.label, "übersprungen", "kein Artikel"); continue; }
+    if (!location) { line(rep, r.label, "übersprungen", `${article}: kein Lagerort`); continue; }
+    if (!rawQty) { line(rep, r.label, "übersprungen", `${article}: keine Menge`); continue; }
+    const qty = parseInteger(rawQty);
+    if (qty === null) { line(rep, r.label, "übersprungen", `${article}: Menge „${rawQty}“ ist keine ganze Zahl`); continue; }
+    if (qty < 0) { line(rep, r.label, "übersprungen", `${article}: negative Menge`); continue; }
+    const state: StockState = parseState(c.get(r, "state")) ?? "FULL";
+    const art = artByName.get(lower(article));
+    const loc = findLoc(location);
+    const key = `${art ? art.id : `new:${lower(article)}`}|${loc ? loc.id : `new:${codeKey(location)}`}|${state}`;
+    const ex = entries.get(key);
+    if (ex) { ex.qty += qty; ex.rows.push(r.label); line(rep, r.label, "Hinweis", `${art?.name ?? article} / ${loc?.name ?? location}: mehrfach in der Datei – Mengen werden addiert`); continue; }
+    entries.set(key, { rows: [r.label], article, location, state, qty, unit: c.get(r, "unit"), category: c.get(r, "category"), art, loc });
+  }
+  if (entries.size > MAX_STOCK_ENTRIES) return { error: `Zu viele Positionen (${entries.size}); bitte höchstens ${MAX_STOCK_ENTRIES} je Import.` };
+
   const newArticles = new Map<string, { name: string; unit: string; category: string; returnable: boolean }>();
   const newLocations = new Map<string, string>();
   const plan: { artKey: string; artId?: string; locKey: string; locId?: string; state: StockState; counted: number }[] = [];
   const cur = (artId: string, locId: string, state: StockState) => stock.find((s) => s.articleId === artId && s.locationId === locId && s.state === state)?.quantity ?? 0;
 
   for (const e of entries.values()) {
-    const art = artByName.get(lower(e.article));
-    const loc = findLoc(e.location);
+    const art = e.art;
+    const loc = e.loc;
     const label = e.rows[0];
     if (art && e.state === "EMPTY" && !art.returnable) { line(rep, label, "übersprungen", `${art.name}: „leer“ gibt es nur bei Pfandartikeln`); continue; }
     if (!art) {

@@ -68,6 +68,7 @@ export async function bookAction(_prev: ActionResult | null, formData: FormData)
       occurredAt = fromBerlinInput(r.occurredAt);
       if (!occurredAt) return fail("Der Zeitpunkt ist ungültig.");
       if (occurredAt.getTime() > Date.now() + 5 * 60_000) return fail("Der Zeitpunkt liegt in der Zukunft – dafür gibt es den Plan.");
+      if (occurredAt.getTime() < Date.now() - 400 * 86_400_000) return fail("Der Zeitpunkt liegt mehr als ein Jahr zurück – bitte das Datum prüfen (Tippfehler im Jahr?).");
     }
     inputs.push({
       kind: r.kind as BookInput["kind"],

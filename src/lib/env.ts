@@ -33,6 +33,7 @@ export function env(): Env {
     const e = parsed.data;
     // Der Klick-Login ohne Passwort darf es in Produktion niemals geben.
     if (e.NODE_ENV === "production" && e.AUTH_MODE !== "microsoft") throw new Error("AUTH_MODE=development ist in Produktion verboten.");
+    if (e.NODE_ENV === "production" && !e.TRUST_PROXY) throw new Error("TRUST_PROXY=true ist in Produktion nötig (hinter dem Caddy), sonst teilen sich alle Anfragen ein gemeinsames Rate-Limit.");
     if (e.NODE_ENV === "production" && /dev-only|change-me|placeholder/i.test(e.SESSION_SECRET)) throw new Error("SESSION_SECRET ist ein Platzhalter – bitte ein eigenes Geheimnis setzen.");
     cached = e;
   }

@@ -7,7 +7,9 @@ import Papa from "papaparse";
 export const IMPORT_MAX_BYTES = 10 * 1024 * 1024;
 export const IMPORT_MAX_ROWS = 5000;
 export const IMPORT_MAX_COLUMNS = 200;
-const IMPORT_MAX_UNCOMPRESSED_BYTES = 100 * 1024 * 1024;
+const IMPORT_MAX_UNCOMPRESSED_BYTES = 40 * 1024 * 1024;
+/** Zellen je Blatt (Zeilen × Spalten): begrenzt den Speicherbedarf beim Einlesen, unabhängig von der Dateigröße. */
+const IMPORT_MAX_CELLS = 250_000;
 const HEADER_SCAN_ROWS = 20;
 const MAX_COLLECTED_ROWS = IMPORT_MAX_ROWS + HEADER_SCAN_ROWS + 1;
 
@@ -76,6 +78,7 @@ async function parseXlsx(buf: Buffer): Promise<ParsedSheet[]> {
   try { await wb.xlsx.load(buf as unknown as ArrayBuffer); } catch { throw new ImportFileError("Die Datei konnte nicht gelesen werden – ist es wirklich eine .xlsx-Datei?"); }
   const sheets: ParsedSheet[] = [];
   wb.eachSheet((ws) => {
+    if (ws.rowCount * Math.min(ws.columnCount, IMPORT_MAX_COLUMNS) > IMPORT_MAX_CELLS) throw new ImportFileError(`Das Blatt „${ws.name}“ ist zu groß (mehr als ${IMPORT_MAX_CELLS.toLocaleString("de-DE")} Zellen) – bitte nur die benötigten Zeilen und Spalten speichern.`);
     const grid: (string[] | undefined)[] = [];
     let collected = 0;
     ws.eachRow({ includeEmpty: false }, (row, n) => {

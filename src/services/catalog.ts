@@ -47,6 +47,7 @@ export async function removeLocation(user: User, id: string, mode: "archive" | "
     if (loc.children.length) return { ok: false, error: "Zuerst die Unterorte archivieren oder verschieben." };
     const left = (await stockRows(prisma, { locationId: id })).filter((r) => r.quantity !== 0);
     if (left.length) return { ok: false, error: "Hier liegt noch Bestand (oder ein Minusbestand). Erst umlagern oder per Korrektur auf 0 setzen." };
+    await prisma.plan.updateMany({ where: { status: "OPEN", OR: [{ toLocationId: id }, { fromLocationId: id }] }, data: { status: "CANCELLED" } });
     await prisma.location.update({ where: { id }, data: { archivedAt: new Date() } });
     await audit("location.archive", { userId: user.id, entity: "location", entityId: id, detail: { name: loc.name } });
     return { ok: true };

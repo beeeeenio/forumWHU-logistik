@@ -16,7 +16,7 @@ export async function GET(_req: NextRequest, ctx: RouteContext<"/api/attachments
     headers: {
       "Content-Type": a.mime,
       "Content-Length": String(a.size),
-      "Content-Disposition": `inline; filename="${a.filename.replace(/[^\w.\- ]/g, "_")}"`,
+      "Content-Disposition": `${a.mime === "application/pdf" ? "attachment" : "inline"}; filename="${a.filename.replace(/[^\w.\- ]/g, "_")}"`,
       "X-Content-Type-Options": "nosniff",
       "Content-Security-Policy": "sandbox; default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'",
       "Cache-Control": "private, no-store",

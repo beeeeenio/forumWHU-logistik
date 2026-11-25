@@ -10,9 +10,10 @@ export const dynamic = "force-dynamic";
 export async function POST(req: NextRequest) {
   const secret = env().CRON_SECRET;
   if (!secret) return new NextResponse(null, { status: 404 });
-  const rl = rateLimit("cron-alerts", 30, 60_000);
-  if (!rl.ok) return new NextResponse("Zu viele Anfragen.", { status: 429 });
+  // Erst das Geheimnis prüfen, dann begrenzen: sonst könnte jemand mit falschem Token den echten Aufruf aussperren
   const given = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
   if (!given || !safeEqual(given, secret)) return new NextResponse(null, { status: 401 });
+  const rl = rateLimit("cron-alerts", 30, 60_000);
+  if (!rl.ok) return new NextResponse("Zu viele Anfragen.", { status: 429 });
   return NextResponse.json(await notifyAlerts());
 }

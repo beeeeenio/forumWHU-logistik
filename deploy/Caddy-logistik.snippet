@@ -2,5 +2,8 @@
 # Vorher: DNS logistik.forumwhu.com -> VPS-IP und unser Stack läuft (Container "logistik-web" im Netz forumwhu-crm-prod_edge).
 logistik.forumwhu.com {
 	encode zstd gzip
+	# Der Cron-Aufruf geht direkt an 127.0.0.1:3200, nicht über das Internet: von außen gesperrt.
+	@cron path /api/cron/*
+	respond @cron 404
 	reverse_proxy logistik-web:3000
 }

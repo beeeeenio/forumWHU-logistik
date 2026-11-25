@@ -24,6 +24,10 @@ test("Zahlen und Beträge im deutschen Format", () => {
   assert.equal(parseInteger("1.200"), 1200);
   assert.equal(parseInteger("12 Kisten"), 12);
   assert.equal(parseInteger("abc"), null);
+  assert.equal(parseInteger("2,5"), null, "nicht ganzzahlig: nie still gerundet");
+  assert.equal(parseInteger("0,4"), null);
+  assert.equal(parseInteger("1e3"), null);
+  assert.equal(parseInteger("12,00"), 12);
   assert.equal(parseCents("4,50"), 450);
   assert.equal(parseCents("4.50 €"), 450);
   assert.equal(parseCents("EUR 4,5"), 450);

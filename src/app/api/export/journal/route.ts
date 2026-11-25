@@ -15,7 +15,9 @@ export async function GET(req: NextRequest) {
   if (!(await getSessionUser())) return new NextResponse("Nicht angemeldet", { status: 401 });
   const f = parseJournalFilter(Object.fromEntries(req.nextUrl.searchParams));
   const locations = await prisma.location.findMany();
-  const rows = await prisma.movement.findMany({ where: journalWhere(f, locations), orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }], take: 20000, include: JOURNAL_INCLUDE });
+  const rows = await prisma.movement.findMany({ where: journalWhere(f, locations), orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }], take: 20001, include: JOURNAL_INCLUDE });
+  // Nie stumm abschneiden: lieber ablehnen und zum Eingrenzen auffordern
+  if (rows.length > 20000) return new NextResponse("Mehr als 20.000 Buchungen im Filter – bitte den Zeitraum oder die Filter eingrenzen.", { status: 413 });
   const place = (id: string | null) => (id ? pathName(locations, id) : "");
   const csv = toCsv([
     ["Zeitpunkt", "Art", "Artikel", "Menge", "Einheit", "Von", "Zustand von", "Nach", "Zustand nach", "Lieferant", "Notiz", "Erfasst von", "Quelle", "Storniert", "Storno-Grund"],

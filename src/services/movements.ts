@@ -33,6 +33,12 @@ export type BookResult =
   | { ok: true; ids: string[]; warnings: string[]; /** diese Erfassung war schon gespeichert – es wurde nichts doppelt gebucht */ duplicate?: boolean }
   | { ok: false; code: "INVALID" | "INSUFFICIENT" | "FORBIDDEN"; error: string; index?: number };
 
+/** Datenbank-Deadlock bzw. Serialisierungskonflikt: sicher wiederholbar (die Transaktion wurde komplett zurückgerollt). */
+export function isRetryable(e: unknown): boolean {
+  const code = e && typeof e === "object" && "code" in e ? String((e as { code?: unknown }).code) : "";
+  return code === "P2034" || code === "40P01" || code === "40001" || (e instanceof Error && /deadlock detected|40P01/i.test(e.message));
+}
+
 class Rollback extends Error {
   constructor(public result: Extract<BookResult, { ok: false }>) { super(result.error); }
 }
@@ -58,6 +64,7 @@ async function bookOne(tx: Tx, user: User, input: BookInput, batchId: string | n
   if (!articleId && input.newArticle) {
     const name = clean(input.newArticle.name);
     if (name.length < 2) throw fail("INVALID", "Der Name des neuen Artikels ist zu kurz.");
+    await tx.$executeRaw`select pg_advisory_xact_lock(hashtextextended(${"article:" + name.toLowerCase()}, 0))`; // zwei gleichzeitige „neuer Artikel X“ legen X nur einmal an
     const existing = await tx.article.findFirst({ where: { name: { equals: name, mode: "insensitive" }, archivedAt: null } });
     if (existing) articleId = existing.id;
     else {
@@ -111,6 +118,7 @@ async function bookOne(tx: Tx, user: User, input: BookInput, batchId: string | n
   let supplierId = input.supplierId || null;
   const supplierName = clean(input.supplierName);
   if (!supplierId && supplierName && input.kind === "RECEIPT") {
+    await tx.$executeRaw`select pg_advisory_xact_lock(hashtextextended(${"supplier:" + supplierName.toLowerCase()}, 0))`;
     const s = (await tx.supplier.findFirst({ where: { name: { equals: supplierName, mode: "insensitive" }, archivedAt: null } })) ?? (await tx.supplier.create({ data: { name: supplierName } }));
     supplierId = s.id;
   }
@@ -142,6 +150,9 @@ async function bookOne(tx: Tx, user: User, input: BookInput, batchId: string | n
 export async function bookInTx(tx: Tx, user: User, inputs: BookInput[], batchId: string | null, requestKey: string | null = null): Promise<{ ids: string[]; warnings: string[] }> {
   const ids: string[] = [];
   const warnings: string[] = [];
+  // Alle bekannten Artikel in fester Reihenfolge sperren: Zwei Erfassungen mit denselben Artikeln in gegenläufiger Reihenfolge
+  // (Wasser, Brot / Brot, Wasser) würden sich sonst gegenseitig blockieren (Deadlock).
+  for (const id of [...new Set(inputs.map((i) => i.articleId).filter((x): x is string => Boolean(x)))].sort()) await lockArticle(tx, id);
   for (let i = 0; i < inputs.length; i++) {
     const r = await bookOne(tx, user, inputs[i], batchId, i, requestKey);
     ids.push(r.id);
@@ -169,7 +180,14 @@ export async function bookMovements(user: User, inputs: BookInput[], opts: { bat
   if (dup) return dup;
   const batchId = opts.batchId ?? (inputs.length > 1 ? crypto.randomUUID() : null);
   try {
-    return await prisma.$transaction(async (tx) => ({ ok: true as const, ...(await bookInTx(tx, user, inputs, batchId, requestKey)) }), { timeout: 20_000 });
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await prisma.$transaction(async (tx) => ({ ok: true as const, ...(await bookInTx(tx, user, inputs, batchId, requestKey)) }), { timeout: 20_000 });
+      } catch (e) {
+        if (attempt < 2 && isRetryable(e)) { await new Promise((r) => setTimeout(r, 50 + Math.random() * 100)); continue; }
+        throw e;
+      }
+    }
   } catch (e) {
     if (e instanceof Rollback) return e.result;
     // Zwei gleichzeitige Anfragen mit derselben Kennung: die zweite scheitert an der Eindeutigkeit und bekommt das Ergebnis der ersten
@@ -185,10 +203,12 @@ export async function voidMovement(user: User, movementId: string, reason: strin
   const why = clean(reason);
   if (why.length < 3) return { ok: false, error: "Bitte einen kurzen Grund angeben (z. B. „falsche Menge“)." };
   return prisma.$transaction(async (tx) => {
+    const pre = await tx.movement.findUnique({ where: { id: movementId }, select: { articleId: true } });
+    if (!pre) return { ok: false as const, error: "Diese Buchung gibt es nicht." };
+    await lockArticle(tx, pre.articleId); // erst sperren, dann prüfen: zwei gleichzeitige Stornos überschreiben sich sonst
     const m = await tx.movement.findUnique({ where: { id: movementId }, include: { article: true, plan: true } });
     if (!m) return { ok: false as const, error: "Diese Buchung gibt es nicht." };
     if (m.voidedAt) return { ok: false as const, error: "Diese Buchung ist bereits storniert." };
-    await lockArticle(tx, m.articleId);
     await tx.movement.update({ where: { id: m.id }, data: { voidedAt: new Date(), voidedById: user.id, voidReason: why } });
     if (m.plan) await tx.plan.update({ where: { id: m.plan.id }, data: { status: "OPEN", doneMovementId: null } });
     await audit("movement.void", { userId: user.id, entity: "movement", entityId: m.id, detail: { kind: m.kind, article: m.article.name, quantity: m.quantity, reason: why } }, tx);

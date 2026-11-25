@@ -159,3 +159,16 @@ test("Verbrauch je Tag: Berliner Kalendertage, storniert zählt nicht, Einheiten
   assert.ok(c.byUnit.some((u) => u.unit === "Palette" && u.total === 27) && c.byUnit.some((u) => u.unit === "Karton" && u.total === 4));
   assert.equal(c.peak?.unit, "Palette");
 });
+
+test("Import Bestand: Name und Alias derselben Ware werden zusammengefasst, nicht überschrieben", async () => {
+  await prisma.article.update({ where: { id: d.wasser.id }, data: { aliases: ["Sprudel"] } });
+  const before = await stockAt(prisma, d.wasser.id, d.L004.id, "FULL");
+  const id = await draft("stock", [["Artikel", "Ort", "Menge"], ["Mineralwasser", "L004", "5"], ["Sprudel", "L004", "7"], ["Mineralwasser", "L004", "2,5"]]);
+  const c = cfg(["article", "location", "quantity"], { stockMode: "add" });
+  const pre = await previewImport(d.user, id, c);
+  assert.ok(pre.ok);
+  if (pre.ok) { assert.ok(pre.report.lines.some((l) => l.status === "Hinweis" && l.text.includes("addiert"))); assert.ok(pre.report.lines.some((l) => l.status === "übersprungen" && l.text.includes("ganze Zahl"))); }
+  const run = await runImport(d.user, id, c);
+  assert.ok(run.ok, run.ok ? "" : run.error);
+  assert.equal(await stockAt(prisma, d.wasser.id, d.L004.id, "FULL"), before + 12);
+});

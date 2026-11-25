@@ -23,6 +23,7 @@ export function loginFlowCookieOptions() {
 }
 
 export async function createSession(userId: string): Promise<void> {
+  await prisma.session.deleteMany({ where: { expiresAt: { lt: new Date() } } }).catch(() => undefined); // Aufräumen: abgelaufene Sitzungen
   const token = randomToken(32);
   const h = await headers();
   const ttlMs = env().SESSION_TTL_HOURS * 3600 * 1000;
