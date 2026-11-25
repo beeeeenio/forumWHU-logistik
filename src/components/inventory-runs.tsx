@@ -12,7 +12,7 @@ export function InventoryRuns({ runs, canWrite, showLocation = true }: { runs: I
       {runs.map((r) => (
         <li key={r.batchId} className={cn("card space-y-2 p-4", r.voided && "opacity-70")}>
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className={cn("font-medium text-heading", r.voided && "line-through")}>{showLocation && r.locationId ? <Link href={`/inventur/${r.locationId}`} className="hover:underline">{r.locationName}</Link> : "Inventur"} · {r.lines.length} Korrektur{r.lines.length === 1 ? "" : "en"}</span>
+            <span className={cn("font-medium text-heading", r.voided && "line-through")}>{r.imported ? "Excel-Import" : showLocation && r.locationId ? <Link href={`/inventur/${r.locationId}`} className="hover:underline">{r.locationName}</Link> : "Inventur"}{r.imported && r.locationName ? ` · ${r.locationName}` : ""} · {r.lines.length} Korrektur{r.lines.length === 1 ? "" : "en"}</span>
             <span className="text-xs text-muted-foreground">{fmtDateTime(r.at)} · {r.by}</span>
           </div>
           <ul className={cn("text-sm", r.voided && "line-through")}>{r.lines.map((l, i) => <li key={i}>{l}</li>)}</ul>

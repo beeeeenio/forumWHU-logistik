@@ -16,8 +16,9 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
     { href: "/plan", label: "Plan", icon: "plan" },
     { href: "/pfand", label: "Leergut & Pfand", icon: "pfand" },
     ...(writer ? [{ href: "/inventur", label: "Inventur", icon: "inventur" }] : []),
+    { href: "/auswertung", label: "Auswertung", icon: "auswertung" },
     { href: "/journal", label: "Journal", icon: "journal" },
-    ...(writer ? [{ href: "/stammdaten", label: "Stammdaten", icon: "stammdaten" }] : []),
+    ...(writer ? [{ href: "/stammdaten", label: "Stammdaten", icon: "stammdaten" }, { href: "/import", label: "Excel-Import", icon: "import" }] : []),
     ...(isAdmin(user.role) ? [{ href: "/admin", label: "Personen", icon: "admin" }] : []),
   ];
   const tabs: NavItem[] = [

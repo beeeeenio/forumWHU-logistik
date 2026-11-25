@@ -1,4 +1,4 @@
-import { ClipboardCheck, LogOut, QrCode, ScrollText, Settings2, Users } from "lucide-react";
+import { ChartColumn, FileUp, ClipboardCheck, LogOut, QrCode, ScrollText, Settings2, Users } from "lucide-react";
 import Link from "next/link";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ROLE_LABEL, canWrite, isAdmin } from "@/lib/roles";
@@ -9,6 +9,8 @@ export const metadata = { title: "Mehr" };
 export default async function MehrPage() {
   const user = await requireUser();
   const links = [
+    { href: "/import", label: "Excel-Import", help: "Bestand, Artikel, Orte, Lieferanten aus Excel/CSV", icon: FileUp, show: canWrite(user.role) },
+    { href: "/auswertung", label: "Auswertung", help: "Verbrauch je Tag und Artikel", icon: ChartColumn, show: true },
     { href: "/inventur", label: "Inventur", help: "Raum zählen, Abweichungen buchen", icon: ClipboardCheck, show: canWrite(user.role) },
     { href: "/qr", label: "QR-Etiketten", help: "Für Türen und Regale ausdrucken", icon: QrCode, show: true },
     { href: "/journal", label: "Journal", help: "Alle Buchungen, filtern, stornieren, Excel-Export", icon: ScrollText, show: true },

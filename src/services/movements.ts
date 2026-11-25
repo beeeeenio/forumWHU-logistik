@@ -22,7 +22,7 @@ export interface BookInput {
   supplierName?: string | null;
   note?: string | null;
   occurredAt?: Date | null;
-  source?: "ui" | "quick" | "plan" | "inventory";
+  source?: "ui" | "quick" | "plan" | "inventory" | "import";
   /** Trotz zu geringem Bestand buchen (Bestand wird negativ und im Lagebericht markiert) */
   force?: boolean;
   /** nur intern: Plan, der dadurch erledigt wird */
@@ -136,22 +136,26 @@ async function bookOne(tx: Tx, user: User, input: BookInput, batchId: string | n
   return { id: m.id, warnings };
 }
 
+/** Bucht Zeilen innerhalb einer bereits offenen Transaktion (z. B. Import). Wirft `BookingRollback`, dann ist alles zurückzurollen. */
+export async function bookInTx(tx: Tx, user: User, inputs: BookInput[], batchId: string | null): Promise<{ ids: string[]; warnings: string[] }> {
+  const ids: string[] = [];
+  const warnings: string[] = [];
+  for (let i = 0; i < inputs.length; i++) {
+    const r = await bookOne(tx, user, inputs[i], batchId, i);
+    ids.push(r.id);
+    warnings.push(...r.warnings);
+  }
+  return { ids, warnings };
+}
+export { Rollback as BookingRollback };
+
 /** Bucht eine oder mehrere Bewegungen in EINER Transaktion: entweder alle oder keine (z. B. eine ganze Lieferung). */
 export async function bookMovements(user: User, inputs: BookInput[], opts: { batchId?: string } = {}): Promise<BookResult> {
   if (!inputs.length) return { ok: false, code: "INVALID", error: "Nichts zu buchen." };
   if (inputs.length > 100) return { ok: false, code: "INVALID", error: "Höchstens 100 Zeilen auf einmal." };
   const batchId = opts.batchId ?? (inputs.length > 1 ? crypto.randomUUID() : null);
   try {
-    return await prisma.$transaction(async (tx) => {
-      const ids: string[] = [];
-      const warnings: string[] = [];
-      for (let i = 0; i < inputs.length; i++) {
-        const r = await bookOne(tx, user, inputs[i], batchId, i);
-        ids.push(r.id);
-        warnings.push(...r.warnings);
-      }
-      return { ok: true as const, ids, warnings };
-    }, { timeout: 20_000 });
+    return await prisma.$transaction(async (tx) => ({ ok: true as const, ...(await bookInTx(tx, user, inputs, batchId)) }), { timeout: 20_000 });
   } catch (e) {
     if (e instanceof Rollback) return e.result;
     throw e;

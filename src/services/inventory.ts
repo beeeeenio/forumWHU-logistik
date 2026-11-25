@@ -65,12 +65,14 @@ export interface InventoryRun {
   lines: string[];
   voided: boolean;
   voidReason: string | null;
+  /** Excel-Import statt Zählung */
+  imported: boolean;
 }
 
 /** Bisherige Inventuren (eine Zählung = ein Eintrag), neueste zuerst. Optional nur für einen Ort. */
 export async function listInventories(locationId?: string, take = 40): Promise<InventoryRun[]> {
   const moves = await prisma.movement.findMany({
-    where: { source: "inventory", batchId: { not: null }, ...(locationId ? { OR: [{ fromLocationId: locationId }, { toLocationId: locationId }] } : {}) },
+    where: { source: { in: ["inventory", "import"] }, batchId: { not: null }, ...(locationId ? { OR: [{ fromLocationId: locationId }, { toLocationId: locationId }] } : {}) },
     orderBy: { createdAt: "desc" },
     take: take * 30,
     include: { article: true, createdBy: true, fromLocation: true, toLocation: true },
@@ -80,9 +82,10 @@ export async function listInventories(locationId?: string, take = 40): Promise<I
     const loc = m.fromLocation ?? m.toLocation;
     const delta = (m.toLocationId ? 1 : -1) * m.quantity;
     const line = `${m.article.name}${m.article.returnable && (m.toState ?? m.fromState) ? ` (${STATE_LABEL[(m.toState ?? m.fromState)!]})` : ""}: ${delta > 0 ? "+" : ""}${delta}`;
-    const r = runs.get(m.batchId!) ?? { batchId: m.batchId!, at: m.createdAt, by: m.createdBy.displayName, locationId: loc?.id ?? null, locationName: loc?.name ?? "?", lines: [], voided: true, voidReason: null };
+    const r = runs.get(m.batchId!) ?? { batchId: m.batchId!, at: m.createdAt, by: m.createdBy.displayName, locationId: loc?.id ?? null, locationName: loc?.name ?? "?", lines: [], voided: true, voidReason: null, imported: m.source === "import" };
+    if (r.locationId && loc && loc.id !== r.locationId) { r.locationName = "mehrere Orte"; r.locationId = null; }
     r.lines.push(line);
-    if (!m.voidedAt) r.voided = false; else r.voidReason ??= m.voidReason?.replace(/^Inventur zurückgenommen:\s*/, "") ?? null;
+    if (!m.voidedAt) r.voided = false; else r.voidReason ??= m.voidReason?.replace(/^Zurückgenommen:\s*/, "") ?? null;
     runs.set(m.batchId!, r);
   }
   return [...runs.values()].slice(0, take);
@@ -93,11 +96,11 @@ export async function voidInventory(user: User, batchId: string, reason: string)
   const why = reason.trim().replace(/\s+/g, " ");
   if (why.length < 3) return { ok: false, error: "Bitte einen kurzen Grund angeben (z. B. „falsch gezählt“)." };
   return prisma.$transaction(async (tx) => {
-    const moves = await tx.movement.findMany({ where: { batchId, source: "inventory", voidedAt: null }, include: { article: true } });
+    const moves = await tx.movement.findMany({ where: { batchId, source: { in: ["inventory", "import"] }, voidedAt: null }, include: { article: true } });
     if (!moves.length) return { ok: false as const, error: "Diese Inventur ist schon zurückgenommen oder existiert nicht." };
     const articleIds = [...new Set(moves.map((m) => m.articleId))].sort();
     for (const id of articleIds) await tx.$executeRaw`select pg_advisory_xact_lock(hashtextextended(${id}, 0))`;
-    await tx.movement.updateMany({ where: { id: { in: moves.map((m) => m.id) } }, data: { voidedAt: new Date(), voidedById: user.id, voidReason: `Inventur zurückgenommen: ${why}` } });
+    await tx.movement.updateMany({ where: { id: { in: moves.map((m) => m.id) } }, data: { voidedAt: new Date(), voidedById: user.id, voidReason: `Zurückgenommen: ${why}` } });
     await audit("inventory.void", { userId: user.id, entity: "inventory", entityId: batchId, detail: { movements: moves.length, reason: why } }, tx);
     const warnings: string[] = [];
     for (const id of articleIds) {

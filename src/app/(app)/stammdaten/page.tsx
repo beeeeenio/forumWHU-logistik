@@ -20,7 +20,7 @@ export default async function StammdatenPage({ searchParams }: PageProps<"/stamm
 
   return (
     <div className="page space-y-5">
-      <div><h1 className="h1">Stammdaten</h1><p className="text-sm text-muted-foreground">Lagerorte, Artikel und Lieferanten pflegen. Was schon verwendet wurde, wird archiviert statt gelöscht – die Historie bleibt.</p></div>
+      <div><h1 className="h1">Stammdaten</h1><p className="text-sm"><Link href="/import" className="underline">Aus Excel/CSV importieren</Link></p><p className="text-sm text-muted-foreground">Lagerorte, Artikel und Lieferanten pflegen. Was schon verwendet wurde, wird archiviert statt gelöscht – die Historie bleibt.</p></div>
       <nav className="flex gap-2" aria-label="Bereich">
         {TABS.map((t) => <Link key={t.id} href={`/stammdaten?tab=${t.id}`} aria-current={tab === t.id ? "page" : undefined} className={cn("btn flex-1 sm:flex-none", tab === t.id ? "border-transparent bg-navy text-white dark:bg-primary dark:text-primary-foreground" : "bg-card text-heading")}>{t.label}</Link>)}
       </nav>

@@ -84,6 +84,7 @@ model User {
   voidedMoves    Movement[]  @relation("MovementVoider")
   plans          Plan[]
   auditEvents    AuditEvent[]
+  importDrafts   ImportDraft[]
 
   @@map("users")
 }
@@ -282,4 +283,21 @@ model Plan {
 
   @@index([status, dueAt])
   @@map("plans")
+}
+
+/// Hochgeladene Excel/CSV-Datei während der Spaltenzuordnung (wird nach dem Import oder nach 24 Stunden gelöscht).
+model ImportDraft {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  kind      String
+  fileName  String   @map("file_name")
+  /// [{ name, hidden, rows: string[][], rowNumbers: number[] }]
+  sheets    Json
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("import_drafts")
 }
