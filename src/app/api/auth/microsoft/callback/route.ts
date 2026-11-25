@@ -54,7 +54,10 @@ export async function GET(req: NextRequest) {
     res.cookies.set(LOGIN_FLOW_COOKIE, "", { ...loginFlowCookieOptions(), maxAge: 0 });
     return res;
   } catch (e) {
-    console.error("microsoft login failed:", e instanceof Error ? e.name : "unknown");
+    // Nur Fehlername und Microsoft-Fehlercode (z. B. AADSTS7000215) – nie Tokens, Codes oder das Geheimnis
+    const code = e && typeof e === "object" && "errorCode" in e ? String((e as { errorCode?: unknown }).errorCode ?? "").slice(0, 60) : "";
+    const aad = e instanceof Error ? (/AADSTS\d+/.exec(e.message)?.[0] ?? "") : "";
+    console.error("microsoft login failed:", e instanceof Error ? e.name : "unknown", code, aad);
     return fail("login_failed");
   }
 }
