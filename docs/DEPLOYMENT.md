@@ -41,6 +41,9 @@ In Teams (Workflows → „Webhook-Anfrage empfangen“, Nachricht in Kanal post
 ```
 Gemeldet werden Minusbestand, Kühlware ohne Kühlung, überfällige Pläne und Unterschreitung des Mindestbestands (nur Lagedaten, keine Personen). Unveränderte Lage wird erst nach 20 Stunden erneut gemeldet, Änderungen sofort.
 
+### Caddy: Cron-Endpunkt von außen sperren
+Der Block in `Caddy-logistik.snippet` enthält jetzt `@cron path /api/cron/*` → 404. Auf einem Server, auf dem der alte Block schon eingetragen ist, den Block `logistik.forumwhu.com { … }` in der Caddyfile des NFS-Stacks durch die neue Fassung ersetzen und Caddy neu laden. **Achtung:** Die Caddyfile ist eine einzeln eingebundene Datei; nach dem Ändern muss der Caddy-Container neu gestartet werden (`docker restart forumwhu-crm-prod-caddy-1`), ein `reload` sieht sonst die alte Version.
+
 ## Betrieb
 - **Update:** `git pull && docker compose --env-file .env up -d --build logistik-web`, bei Schemaänderungen vorher/nachher `run --rm migrate`.
 - **Sicherung:** `deploy/backup.sh` per cron (`15 3 * * *`), pg_dump, 14 Tage, optional verschlüsselt (`BACKUP_PASSPHRASE_FILE`). Wiederherstellung einmal testen, bevor man sich darauf verlässt; eine Kopie außerhalb des Servers aufbewahren.

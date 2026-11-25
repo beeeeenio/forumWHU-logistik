@@ -20,7 +20,7 @@ export default async function StammdatenPage({ searchParams }: PageProps<"/stamm
 
   return (
     <div className="page space-y-5">
-      <div><h1 className="h1">Stammdaten</h1><p className="text-sm"><Link href="/import" className="underline">Aus Excel/CSV importieren</Link></p><p className="text-sm text-muted-foreground">Lagerorte, Artikel und Lieferanten pflegen. Was schon verwendet wurde, wird archiviert statt gelöscht – die Historie bleibt.</p></div>
+      <div><h1 className="h1">Stammdaten</h1><p className="text-sm"><Link href="/import" className="inline-flex min-h-11 items-center underline">Aus Excel/CSV importieren</Link></p><p className="text-sm text-muted-foreground">Lagerorte, Artikel und Lieferanten pflegen. Was schon verwendet wurde, wird archiviert statt gelöscht – die Historie bleibt.</p></div>
       <nav className="flex gap-2" aria-label="Bereich">
         {TABS.map((t) => <Link key={t.id} href={`/stammdaten?tab=${t.id}`} aria-current={tab === t.id ? "page" : undefined} className={cn("btn flex-1 sm:flex-none", tab === t.id ? "border-transparent bg-navy text-white dark:bg-primary dark:text-primary-foreground" : "bg-card text-heading")}>{t.label}</Link>)}
       </nav>
@@ -39,7 +39,7 @@ async function Orte() {
   const options = tree.map((n) => ({ id: n.loc.id, label: pathName(locations, n.loc.id) }));
   return (
     <div className="space-y-4">
-      <p className="text-sm"><Link href="/qr" className="underline">QR-Etiketten für alle Lagerorte drucken</Link></p>
+      <p className="text-sm"><Link href="/qr" className="inline-flex min-h-11 items-center underline">QR-Etiketten für alle Lagerorte drucken</Link></p>
       <details className="card p-4"><summary className="flex items-center gap-2 font-medium text-heading"><Plus className="size-5" />Neuer Lagerort</summary><div className="mt-4"><LocationForm options={options} /></div></details>
       {tree.length === 0 ? <Empty title="Noch keine Lagerorte" /> : (
         <ul className="space-y-2">
@@ -48,7 +48,7 @@ async function Orte() {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="flex flex-wrap items-center gap-2">
                   {n.loc.kind === "TRAILER" ? <Truck className="size-4 text-muted-foreground" /> : isCooled(locations, n.loc.id) ? <Snowflake className="size-4 text-sky-600 dark:text-sky-300" /> : null}
-                  <Link href={`/orte/${n.loc.id}`} className="font-medium text-heading hover:underline">{n.loc.name}</Link>
+                  <Link href={`/orte/${n.loc.id}`} className="inline-flex min-h-11 items-center font-medium text-heading hover:underline">{n.loc.name}</Link>
                   {n.loc.code && n.loc.code !== n.loc.name && <span className="chip-muted">{n.loc.code}</span>}
                   <span className="text-xs text-muted-foreground">{KIND_LABEL[n.loc.kind]}</span>
                 </span>
@@ -81,7 +81,7 @@ async function Artikel() {
           {active.map((a) => (
             <li key={a.id} className="card p-3">
               <div className="flex flex-wrap items-center gap-2">
-                <Link href={`/artikel/${a.id}`} className="font-medium text-heading hover:underline">{a.name}</Link>
+                <Link href={`/artikel/${a.id}`} className="inline-flex min-h-11 items-center font-medium text-heading hover:underline">{a.name}</Link>
                 <span className="chip-muted">{a.category}</span><span className="text-xs text-muted-foreground">je {a.unit}</span>
                 {a.returnable && <span className="chip-muted">Pfand {fmtEuro(a.depositCents)}</span>}
                 {a.needsCooling && <span className="chip border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-300"><Snowflake className="size-3" />kühlen</span>}

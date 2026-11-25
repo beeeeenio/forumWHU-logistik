@@ -23,7 +23,7 @@ export function MovementRow({ m, locations, canWrite, copyHref }: { m: MovementF
         <div className={cn("min-w-0", voided && "line-through decoration-danger/60")}>
           <div className="flex flex-wrap items-center gap-2">
             <span className="chip-muted">{KIND_LABEL[m.kind]}</span>
-            <Link href={`/artikel/${m.articleId}`} className="font-semibold text-heading hover:underline">{m.kind === "ADJUST" && !m.fromLocationId ? "+" : m.kind === "ADJUST" ? "−" : ""}{fmtQty(m.quantity, m.article.unit)} {m.article.name}</Link>
+            <Link href={`/artikel/${m.articleId}`} className="inline-flex min-h-11 items-center font-semibold text-heading hover:underline">{m.kind === "ADJUST" && !m.fromLocationId ? "+" : m.kind === "ADJUST" ? "−" : ""}{fmtQty(m.quantity, m.article.unit)} {m.article.name}</Link>
           </div>
           <p className="mt-1 flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground">
             {from && <span>{from}</span>}

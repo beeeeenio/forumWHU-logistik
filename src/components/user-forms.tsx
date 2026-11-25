@@ -22,7 +22,7 @@ export function UserRow({ id, role, deactivated, self }: { id: string; role: Rol
     <div className="flex flex-wrap items-end gap-2">
       <ActionForm action={userUpdateAction} keepOnSuccess className="flex items-end gap-2">
         <input type="hidden" name="id" value={id} /><input type="hidden" name="op" value="role" />
-        <label><span className="label">Rolle</span><select name="role" defaultValue={role} className="field min-h-9 py-1 text-sm">{ROLES.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}</select></label>
+        <label><span className="label">Rolle</span><select name="role" defaultValue={role} className="field">{ROLES.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}</select></label>
         <SubmitButton className="btn-secondary btn-sm">Ändern</SubmitButton>
       </ActionForm>
       <ActionForm action={userUpdateAction} keepOnSuccess className="flex gap-2" confirm={deactivated ? undefined : "Zugang sperren? Die Person wird sofort abgemeldet."}>

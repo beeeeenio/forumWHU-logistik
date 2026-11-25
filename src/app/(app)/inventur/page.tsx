@@ -16,7 +16,7 @@ export default async function InventurPage() {
   return (
     <div className="page max-w-3xl space-y-5">
       <div><h1 className="h1">Inventur</h1><p className="text-sm text-muted-foreground">Raum wählen, alles zählen, Zahlen eintragen. Gebucht werden nur die Abweichungen – am Ende stimmt die Lage mit dem Regal überein. Tipp: Der QR-Code an der Tür öffnet den Raum direkt.</p></div>
-      <p className="text-sm"><Link href="/inventur/verlauf" className="underline">Frühere Inventuren ansehen / zurücknehmen</Link></p>
+      <p className="text-sm"><Link href="/inventur/verlauf" className="inline-flex min-h-11 items-center underline">Frühere Inventuren ansehen / zurücknehmen</Link></p>
       {nodes.length === 0 ? <Empty title="Noch keine Lagerorte" /> : (
         <ul className="space-y-2">
           {nodes.map((n) => (

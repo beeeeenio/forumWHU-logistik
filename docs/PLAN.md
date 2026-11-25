@@ -47,6 +47,9 @@ Login + Rollen · Lagerorte/Artikel/Lieferanten · Buchen (6 Arten, mehrere Zeil
 
 Bewusst **nicht** umgesetzt: *Soll je Phase* (Bedarf pro Anlass gegen Bestand) und *Mindesthaltbarkeit/Chargen*. Der Bestand wird je (Artikel, Ort, Zustand) gezählt – Chargen bräuchten eine zusätzliche Dimension im Bestandsmodell und sollten erst nach Praxiserfahrung im Kongress festgelegt werden. Der Plan deckt das „was soll wohin“ bereits ab.
 
+### Prüfung
+Unabhängige Prüfung von Handy-Bedienung, Code und Sicherheit: Befunde und Umsetzung in [PRUEFUNG.md](PRUEFUNG.md).
+
 ### Weitere Ideen
 Siehe [IDEEN.md](IDEEN.md). Die Anbindung an das NFS-CRM ist **nicht gewünscht** und gestrichen.
 

@@ -47,10 +47,10 @@
   --primary: var(--orange);
   --primary-foreground: var(--navy);
   --border: var(--beige-600);
-  --input: #b3b3b3;
-  --ring: color-mix(in srgb, var(--navy) 35%, transparent);
-  --danger: #c4320a;
-  --warn: #9a6b00;
+  --input: #767676;
+  --ring: var(--navy);
+  --danger: #b02a05;
+  --warn: #7a5200;
   --ok: #1a6b3d;
   --shadow-soft: 0 1px 2px rgb(6 22 56 / 6%), 0 1px 3px rgb(6 22 56 / 8%);
   --sidebar-fg: var(--beige);
@@ -66,8 +66,8 @@
   --muted: var(--navy-600);
   --muted-foreground: #b3b3b3;
   --border: var(--navy-500);
-  --input: var(--navy-400);
-  --ring: color-mix(in srgb, var(--orange) 55%, transparent);
+  --input: #7d8fb8;
+  --ring: var(--orange);
   --danger: #ff8f70;
   --warn: #f3c15a;
   --ok: #6fd39a;
@@ -92,7 +92,8 @@
   .btn-primary { @apply border-transparent bg-primary text-primary-foreground hover:brightness-95; }
   .btn-secondary { @apply bg-card text-heading hover:bg-muted; }
   .btn-danger { @apply bg-card text-danger border-danger/40 hover:bg-danger/10; }
-  .btn-sm { @apply min-h-9 rounded-lg px-3 text-xs; }
+  /* Tippfläche mindestens 44 px (Handschuhe, kalte Finger); am Desktop kompakter */
+  .btn-sm { @apply min-h-11 rounded-lg px-3 text-sm md:min-h-9 md:text-xs; }
   .field { @apply min-h-11 w-full rounded-xl border border-input bg-card px-3 text-foreground placeholder:text-muted-foreground; }
   textarea.field { @apply py-2; }
   .label { @apply mb-1 block text-xs font-medium tracking-wide text-muted-foreground uppercase; }
@@ -107,5 +108,5 @@
 
 /* Tab-Leiste und Inhalt: Platz für den iPhone-Home-Balken */
 .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
-details > summary { list-style: none; }
+details > summary { list-style: none; min-height: 2.75rem; display: flex; align-items: center; }
 details > summary::-webkit-details-marker { display: none; }

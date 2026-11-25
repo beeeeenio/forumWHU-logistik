@@ -51,7 +51,7 @@ export async function getConsumption(fromYmd: string, toYmd: string, includeWrit
   const unitTotals = new Map<string, number>();
   const dayUnit = new Map<string, number>();
   for (const r of list) {
-    unitTotals.set(r.article.unit, (unitTotals.get(r.article.unit) ?? 0) + r.total);
+    if (r.total > 0) unitTotals.set(r.article.unit, (unitTotals.get(r.article.unit) ?? 0) + r.total);
     for (const [day, q] of Object.entries(r.perDay)) dayUnit.set(`${day}|${r.article.unit}`, (dayUnit.get(`${day}|${r.article.unit}`) ?? 0) + q);
   }
   let peak: Consumption["peak"] = null;

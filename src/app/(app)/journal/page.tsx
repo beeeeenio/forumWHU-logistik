@@ -36,16 +36,19 @@ export default async function JournalPage({ searchParams }: PageProps<"/journal"
         <a href={`/api/export/journal?${qs.toString()}`} className="btn-secondary btn-sm"><Download className="size-4" />Excel (CSV)</a>
       </div>
 
-      <form className="card grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4" role="search" aria-label="Journal filtern">
+      <details className="card px-4 py-1" open={false}>
+        <summary className="font-medium text-heading">Filtern{hasFilter ? ` · ${[f.articleId, f.locationId, f.kind, f.userId, f.fromStr, f.toStr, f.includeVoided ? "x" : ""].filter(Boolean).length} aktiv` : ""}</summary>
+      <form className="grid gap-3 pt-2 pb-4 sm:grid-cols-2 lg:grid-cols-4" role="search" aria-label="Journal filtern">
         <label><span className="label">Artikel</span><select name="article" defaultValue={f.articleId ?? ""} className="field"><option value="">alle</option>{articles.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
         <label><span className="label">Ort</span><select name="location" defaultValue={f.locationId ?? ""} className="field"><option value="">alle</option>{ordered.map((l) => <option key={l.id} value={l.id}>{pathName(locations, l.id)}</option>)}</select></label>
         <label><span className="label">Art</span><select name="kind" defaultValue={f.kind ?? ""} className="field"><option value="">alle</option>{MOVEMENT_KINDS.map((k) => <option key={k} value={k}>{KIND_LABEL[k]}</option>)}</select></label>
         <label><span className="label">Erfasst von</span><select name="user" defaultValue={f.userId ?? ""} className="field"><option value="">alle</option>{users.map((u) => <option key={u.id} value={u.id}>{u.displayName}</option>)}</select></label>
         <label><span className="label">Von (Datum)</span><input type="date" name="from" defaultValue={f.fromStr} className="field" /></label>
         <label><span className="label">Bis (Datum)</span><input type="date" name="to" defaultValue={f.toStr} className="field" /></label>
-        <label className="flex items-center gap-2 text-sm sm:pt-6"><input type="checkbox" name="voided" value="1" defaultChecked={f.includeVoided} className="size-5" />Stornierte zeigen</label>
+        <label className="flex min-h-11 items-center gap-2 text-sm sm:pt-6"><input type="checkbox" name="voided" value="1" defaultChecked={f.includeVoided} className="size-6" />Stornierte zeigen</label>
         <div className="flex items-end gap-2"><button className="btn-primary flex-1">Filtern</button>{hasFilter && <Link href="/journal" className="btn-secondary">Zurücksetzen</Link>}</div>
       </form>
+      </details>
 
       {rows.length === 0 ? <Empty title="Keine Buchungen gefunden" /> : (
         <ul className="space-y-3">{rows.map((m) => <MovementRow key={m.id} m={m} locations={locations} canWrite={writer} copyHref={m.kind !== "ADJUST" ? buchenHref({ copy: m.id }) : undefined} />)}</ul>

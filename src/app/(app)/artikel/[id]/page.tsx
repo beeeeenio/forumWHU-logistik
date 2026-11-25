@@ -1,6 +1,7 @@
 import { ArrowRight, Snowflake } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { prisma } from "@/db/prisma";
 import { MovementRow } from "@/components/movement-row";
 import { Empty } from "@/components/stock-ui";
 import { StockActions } from "@/components/stock-actions";
@@ -11,6 +12,12 @@ import { canWrite } from "@/lib/roles";
 import { requireUser } from "@/lib/session";
 import { fmtRelativeDay } from "@/lib/time";
 import { getArticleOverview } from "@/services/reports";
+
+export async function generateMetadata({ params }: PageProps<"/artikel/[id]">) {
+  const { id } = await params;
+  const a = /^[0-9a-f-]{36}$/.test(id) ? await prisma.article.findUnique({ where: { id }, select: { name: true } }) : null;
+  return { title: a?.name ?? "Artikel" };
+}
 
 export default async function ArtikelPage({ params }: PageProps<"/artikel/[id]">) {
   const user = await requireUser();
@@ -50,7 +57,7 @@ export default async function ArtikelPage({ params }: PageProps<"/artikel/[id]">
             {sorted.map((r) => (
               <li key={`${r.locationId}${r.state}`} className="card space-y-2 p-4">
                 <div className="flex items-center justify-between gap-3">
-                  <Link href={`/orte/${r.locationId}`} className="flex items-center gap-1.5 font-medium text-heading hover:underline">{pathName(locations, r.locationId)}{!isCooled(locations, r.locationId) && article.needsCooling && <span className="chip-warn">ungekühlt</span>}</Link>
+                  <Link href={`/orte/${r.locationId}`} className="flex min-h-11 items-center gap-1.5 font-medium text-heading hover:underline">{pathName(locations, r.locationId)}{!isCooled(locations, r.locationId) && article.needsCooling && <span className="chip-warn">ungekühlt</span>}</Link>
                   <span className={r.quantity < 0 ? "font-semibold text-danger" : "font-semibold text-heading"}>{fmtQty(r.quantity, article.unit)} {article.returnable ? (r.state === "FULL" ? "voll" : "leer") : ""}</span>
                 </div>
                 {writer && <StockActions articleId={id} locationId={r.locationId} state={r.state} quantity={r.quantity} returnable={article.returnable} />}
@@ -73,7 +80,7 @@ export default async function ArtikelPage({ params }: PageProps<"/artikel/[id]">
       )}
 
       <section className="space-y-3">
-        <div className="flex items-center justify-between"><h2 className="text-xl">Verlauf</h2><Link href={`/journal?article=${id}`} className="text-sm underline">Alle</Link></div>
+        <div className="flex items-center justify-between"><h2 className="text-xl">Verlauf</h2><Link href={`/journal?article=${id}`} className="inline-flex min-h-11 items-center px-2 text-sm underline">Alle</Link></div>
         {moves.length === 0 ? <p className="text-sm text-muted-foreground">Noch keine Buchungen.</p> : <ul className="space-y-3">{moves.map((m) => <MovementRow key={m.id} m={m} locations={locations} canWrite={writer} copyHref={buchenHref({ copy: m.id })} />)}</ul>}
       </section>
     </div>

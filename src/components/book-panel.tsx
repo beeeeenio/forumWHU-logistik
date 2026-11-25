@@ -205,7 +205,7 @@ function DraftEditor({ d, index, total, catalog, set, remove }: { d: Draft; inde
             <div className="grid gap-2 rounded-xl border border-dashed p-3 sm:grid-cols-3">
               <label className="sm:col-span-2"><span className="label">Name des neuen Artikels</span><input value={d.newName} onChange={(e) => set({ newName: e.target.value })} className="field" maxLength={120} /></label>
               <label><span className="label">Einheit</span><input value={d.newUnit} onChange={(e) => set({ newUnit: e.target.value })} className="field" list="unit-list" maxLength={40} /></label>
-              <label className="flex items-center gap-2 text-sm sm:col-span-3"><input type="checkbox" checked={d.newReturnable} onChange={(e) => set({ newReturnable: e.target.checked })} className="size-5" />Pfandartikel (Leergut wird mitgezählt)</label>
+              <label className="flex min-h-11 items-center gap-2 text-sm sm:col-span-3"><input type="checkbox" checked={d.newReturnable} onChange={(e) => set({ newReturnable: e.target.checked })} className="size-5" />Pfandartikel (Leergut wird mitgezählt)</label>
             </div>
           )}
         </div>

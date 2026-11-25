@@ -32,7 +32,7 @@ function NodeBody({ node, locations }: { node: LageNode; locations: Location[] }
 function LocHeader({ node, locations, small }: { node: LageNode; locations: Location[]; small?: boolean }) {
   const cold = isCooled(locations, node.loc.id);
   return (
-    <Link href={`/orte/${node.loc.id}`} className="group flex items-center justify-between gap-2">
+    <Link href={`/orte/${node.loc.id}`} className="group flex min-h-11 items-center justify-between gap-2">
       <span className="flex min-w-0 items-center gap-2">
         {node.loc.kind === "TRAILER" ? <Truck className="size-4 shrink-0 text-muted-foreground" /> : cold ? <Snowflake className="size-4 shrink-0 text-sky-600 dark:text-sky-300" aria-label="gekühlt" /> : null}
         <span className={small ? "font-medium text-heading" : "font-heading text-lg text-heading"}>{node.loc.name}</span>

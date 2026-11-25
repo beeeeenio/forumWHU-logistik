@@ -16,7 +16,7 @@ export function Qty({ article, full, empty }: { article: Pick<Article, "unit" | 
 
 export function ArticleLink({ article, cold }: { article: Pick<Article, "id" | "name" | "needsCooling">; cold?: boolean }) {
   return (
-    <Link href={`/artikel/${article.id}`} className="inline-flex items-center gap-1.5 font-medium text-heading hover:underline">
+    <Link href={`/artikel/${article.id}`} className="inline-flex min-h-11 items-center gap-1.5 font-medium text-heading hover:underline">
       {article.name}
       {article.needsCooling && <Snowflake className={cn("size-3.5", cold === false ? "text-warn" : "text-muted-foreground")} aria-label="kühlpflichtig" />}
     </Link>

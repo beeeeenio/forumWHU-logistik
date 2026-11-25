@@ -35,7 +35,7 @@ export default async function PfandPage() {
             {lines.map((l) => (
               <li key={l.article.id} className="card space-y-3 p-4">
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <Link href={`/artikel/${l.article.id}`} className="font-heading text-lg text-heading hover:underline">{l.article.name}</Link>
+                  <Link href={`/artikel/${l.article.id}`} className="inline-flex min-h-11 items-center font-heading text-lg text-heading hover:underline">{l.article.name}</Link>
                   <span className="text-sm text-muted-foreground">Pfand {fmtEuro(l.article.depositCents)} je {l.article.unit}</span>
                 </div>
                 <div className="grid grid-cols-3 gap-2 text-center">
@@ -49,7 +49,7 @@ export default async function PfandPage() {
                     <ul className="divide-y">
                       {l.emptyByLocation.map((e) => (
                         <li key={e.locationId} className="flex flex-wrap items-center justify-between gap-2 py-2">
-                          <Link href={`/orte/${e.locationId}`} className="text-heading hover:underline">{pathName(locations, e.locationId)}</Link>
+                          <Link href={`/orte/${e.locationId}`} className="inline-flex min-h-11 items-center text-heading hover:underline">{pathName(locations, e.locationId)}</Link>
                           <span className="flex items-center gap-2"><strong className={e.quantity < 0 ? "text-danger" : "text-heading"}>{fmtQty(e.quantity, l.article.unit)}</strong>
                             {writer && e.quantity > 0 && <><Link href={buchenHref({ kind: "TRANSFER", article: l.article.id, from: e.locationId, state: "EMPTY", qty: e.quantity })} className="btn-secondary btn-sm">Umlagern</Link><Link href={buchenHref({ kind: "RETURN", article: l.article.id, from: e.locationId, qty: e.quantity })} className="btn-secondary btn-sm">Pfand zurück</Link></>}
                           </span>

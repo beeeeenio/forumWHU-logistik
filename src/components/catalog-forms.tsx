@@ -44,7 +44,7 @@ export function LocationForm({ values = {}, options }: { values?: LocValues; opt
         <select name="parentId" defaultValue={values.parentId ?? ""} className="field"><option value="">– oberste Ebene –</option>{options.filter((o) => o.id !== values.id).map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}</select></label>
       <label><span className="label">Art</span>
         <select name="kind" defaultValue={values.kind ?? "ROOM"} className="field"><option value="SITE">Gebäude / Gelände</option><option value="ROOM">Raum</option><option value="COLD">Kühlraum / Kühllager</option><option value="TRAILER">Kühlanhänger</option></select></label>
-      <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="cooled" defaultChecked={values.cooled} className="size-5" />Gekühlt (Kühlware darf hier liegen)</label>
+      <label className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" name="cooled" defaultChecked={values.cooled} className="size-6" />Gekühlt (Kühlware darf hier liegen)</label>
       <label><span className="label">Reihenfolge</span><input name="sortOrder" inputMode="numeric" defaultValue={values.sortOrder ?? 0} className="field" /></label>
       <label className="sm:col-span-2"><span className="label">Notiz</span><input name="note" maxLength={300} defaultValue={values.note ?? ""} className="field" placeholder="z. B. Schlüssel beim Hausmeister" /></label>
       <div className="sm:col-span-2"><SubmitButton>Speichern</SubmitButton></div>
@@ -62,9 +62,9 @@ export function ArticleForm({ values = {}, categories }: { values?: ArtValues; c
       <label><span className="label">Andere Schreibweisen (Komma)</span><input name="aliases" maxLength={400} defaultValue={values.aliases?.join(", ")} className="field" placeholder="Wasser, Fachingen" /></label>
       <label><span className="label">Kategorie</span><input name="category" list="cat-list" maxLength={60} defaultValue={values.category ?? "Getränke"} className="field" /></label>
       <label><span className="label">Einheit (Einzahl)</span><input name="unit" list="unit-list2" maxLength={40} defaultValue={values.unit ?? "Kiste"} className="field" /></label>
-      <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="returnable" defaultChecked={values.returnable} className="size-5" />Pfandartikel (voll/leer getrennt zählen)</label>
+      <label className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" name="returnable" defaultChecked={values.returnable} className="size-6" />Pfandartikel (voll/leer getrennt zählen)</label>
       <label><span className="label">Pfand je Einheit (€)</span><input name="deposit" inputMode="decimal" defaultValue={values.depositCents ? (values.depositCents / 100).toFixed(2).replace(".", ",") : "0"} className="field" /></label>
-      <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="needsCooling" defaultChecked={values.needsCooling} className="size-5" />Braucht Kühlung</label>
+      <label className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" name="needsCooling" defaultChecked={values.needsCooling} className="size-6" />Braucht Kühlung</label>
       <label><span className="label">Mindestbestand (warnt darunter)</span><input name="minStock" inputMode="numeric" defaultValue={values.minStock ?? ""} className="field" placeholder="leer = keine Grenze" /></label>
       <label><span className="label">Notiz</span><input name="note" maxLength={300} defaultValue={values.note ?? ""} className="field" /></label>
       <div className="sm:col-span-2"><SubmitButton>Speichern</SubmitButton></div>

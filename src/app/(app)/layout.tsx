@@ -30,6 +30,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   ];
   return (
     <div className="flex min-h-dvh flex-1 print:block">
+      <a href="#inhalt" className="sr-only z-50 rounded-lg bg-card px-4 py-3 font-medium text-heading focus:not-sr-only focus:fixed focus:top-2 focus:left-2">Zum Inhalt springen</a>
       <aside className="print:hidden sticky top-0 hidden h-dvh w-60 shrink-0 flex-col justify-between bg-navy p-4 md:flex">
         <div className="space-y-8">
           <Brand tone="navy" height={42} className="px-2 pt-2" />
@@ -51,7 +52,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
           <Brand tone="navy" height={28} />
           <span className="text-xs text-sidebar-fg/80">{user.displayName.split(" ")[0]} · {ROLE_LABEL[user.role]}</span>
         </header>
-        <main className="flex-1 pb-[calc(var(--tabbar-h)+env(safe-area-inset-bottom)+1rem)] md:pb-0">{children}</main>
+        <main id="inhalt" tabIndex={-1} className="flex-1 outline-none pb-[calc(var(--tabbar-h)+env(safe-area-inset-bottom)+1rem)] md:pb-0">{children}</main>
       </div>
       <div className="print:hidden"><TabBar items={tabs} /></div>
     </div>

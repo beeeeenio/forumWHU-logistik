@@ -1,6 +1,7 @@
 import { Download } from "lucide-react";
 import Link from "next/link";
 import { Empty } from "@/components/stock-ui";
+import { ScrollEnd } from "@/components/scroll-end";
 import { fmtQty } from "@/lib/format";
 import { requireUser } from "@/lib/session";
 import { cn } from "@/lib/utils";
@@ -37,25 +38,28 @@ export default async function AuswertungPage({ searchParams }: PageProps<"/auswe
         <a href={`/api/export/verbrauch?${qs({ from, to })}`} className="btn-secondary btn-sm"><Download className="size-4" />Excel (CSV)</a>
       </div>
 
-      <div className="flex flex-wrap gap-2" role="group" aria-label="Zeitraum wählen">
-        {presets.map((p) => <Link key={p.label} href={`/auswertung?${qs({ from: p.from, to: p.to })}`} className={cn("btn-secondary btn-sm", p.from === from && p.to === to && "border-transparent bg-navy text-white dark:bg-primary dark:text-primary-foreground")}>{p.label}</Link>)}
+      <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 md:mx-0 md:flex-wrap md:px-0" role="group" aria-label="Zeitraum wählen">
+        {presets.map((p) => <Link key={p.label} href={`/auswertung?${qs({ from: p.from, to: p.to })}`} className={cn("btn-secondary btn-sm shrink-0", p.from === from && p.to === to && "border-transparent bg-navy text-white dark:bg-primary dark:text-primary-foreground")}>{p.label}</Link>)}
       </div>
-      <form className="card grid gap-3 p-4 sm:grid-cols-4" aria-label="Eigener Zeitraum">
-        <label><span className="label">Von</span><input type="date" name="from" defaultValue={from} className="field" /></label>
-        <label><span className="label">Bis</span><input type="date" name="to" defaultValue={to} className="field" /></label>
-        <label className="flex items-center gap-2 text-sm sm:pt-6"><input type="checkbox" name="abgang" value="1" defaultChecked={includeWriteOff} className="size-5" />Abgang mitzählen</label>
-        <div className="flex items-end"><button className="btn-primary w-full">Anzeigen</button></div>
-      </form>
+      <details className="card px-4 py-1" open={!presets.some((p) => p.from === from && p.to === to)}>
+        <summary className="font-medium text-heading">Eigener Zeitraum · {from.split("-").reverse().join(".")} – {to.split("-").reverse().join(".")}{includeWriteOff ? " · inkl. Abgang" : ""}</summary>
+        <form className="grid gap-3 pt-2 pb-3 sm:grid-cols-4" aria-label="Eigener Zeitraum">
+          <label><span className="label">Von</span><input type="date" name="from" defaultValue={from} className="field" /></label>
+          <label><span className="label">Bis</span><input type="date" name="to" defaultValue={to} className="field" /></label>
+          <label className="flex min-h-11 items-center gap-2 text-sm sm:pt-6"><input type="checkbox" name="abgang" value="1" defaultChecked={includeWriteOff} className="size-6" />Abgang mitzählen</label>
+          <div className="flex items-end"><button className="btn-primary w-full">Anzeigen</button></div>
+        </form>
+      </details>
 
-      {c.rows.length === 0 ? <Empty title="Im Zeitraum nichts verbraucht">Verbrauch entsteht durch Buchungen „Verbraucht“ (bzw. „Leer gemacht“). Wähle einen anderen Zeitraum oder buche den Verbrauch.</Empty> : (
+      {c.rows.length === 0 ? <Empty title="Im Zeitraum nichts verbraucht">Verbrauch entsteht durch Buchungen „Verbraucht“ (bei Pfandartikeln: „Verbraucht (→ leer)“). Wähle einen anderen Zeitraum oder buche den Verbrauch.</Empty> : (
         <>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div className="card p-4"><p className="label">Verbraucht im Zeitraum</p><p className="text-lg font-semibold text-heading">{c.byUnit.map((u) => fmtQty(u.total, u.unit)).join(" · ")}</p><p className="text-xs text-muted-foreground">Einheiten werden nicht zusammengezählt</p></div>
-            <div className="card p-4"><p className="label">Spitzentag</p><p className="text-lg font-semibold text-heading">{c.peak ? `${dayLabel(c.peak.day)}: ${fmtQty(c.peak.total, c.peak.unit)}` : "–"}</p><p className="text-xs text-muted-foreground">höchster Tagesverbrauch einer Einheit</p></div>
-            <div className="card p-4"><p className="label">Artikel mit Verbrauch</p><p className="text-lg font-semibold text-heading">{c.rows.filter((r) => r.total > 0).length}</p><p className="text-xs text-muted-foreground">{c.days.length} Tage betrachtet</p></div>
-          </div>
+          <dl className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <div className="card px-4 py-3"><dt className="label !mb-0">Verbraucht</dt><dd className="font-semibold text-heading">{c.byUnit.map((u) => fmtQty(u.total, u.unit)).join(" · ") || "–"}</dd></div>
+            <div className="card px-4 py-3"><dt className="label !mb-0">Spitzentag</dt><dd className="font-semibold text-heading">{c.peak ? `${dayLabel(c.peak.day)}: ${fmtQty(c.peak.total, c.peak.unit)}` : "–"}</dd></div>
+            <div className="card px-4 py-3"><dt className="label !mb-0">Artikel · Tage</dt><dd className="font-semibold text-heading">{c.rows.filter((r) => r.total > 0).length} Artikel · {c.days.length} Tage</dd></div>
+          </dl>
 
-          <section aria-label="Verbrauch je Tag und Artikel" className="card overflow-x-auto">
+          <ScrollEnd label="Verbrauch je Tag und Artikel – seitlich scrollbar">
             <table className="w-full min-w-max border-collapse text-sm">
               <caption className="sr-only">Verbrauch je Tag und Artikel im Zeitraum {from} bis {to}</caption>
               <thead>
@@ -71,10 +75,10 @@ export default async function AuswertungPage({ searchParams }: PageProps<"/auswe
                   const max = Math.max(1, ...Object.values(r.perDay));
                   return (
                     <tr key={r.article.id} className="border-b last:border-0">
-                      <th scope="row" className="sticky left-0 z-10 bg-card px-3 py-2 text-left font-medium whitespace-nowrap text-heading"><Link href={`/artikel/${r.article.id}`} className="hover:underline">{r.article.name}</Link><span className="ml-1 text-xs font-normal text-muted-foreground">({r.article.unit})</span></th>
+                      <th scope="row" className="sticky left-0 z-10 max-w-[9rem] truncate bg-card px-3 py-2 text-left font-medium text-heading"><Link href={`/artikel/${r.article.id}`} className="inline-flex min-h-11 items-center hover:underline">{r.article.name}</Link><span className="ml-1 text-xs font-normal text-muted-foreground">({r.article.unit})</span></th>
                       {c.days.map((d) => {
                         const q = r.perDay[d] ?? 0;
-                        return <td key={d} className="px-1 py-1 text-center"><span className={cn("inline-flex min-w-9 items-center justify-center rounded-md px-1.5 py-1 tabular-nums", q ? "font-semibold text-heading" : "text-muted-foreground/60")} style={q ? { backgroundColor: `color-mix(in srgb, var(--primary) ${Math.round(15 + 70 * (q / max))}%, transparent)` } : undefined}>{q || "·"}</span></td>;
+                        return <td key={d} className="px-1 py-1 text-center"><span className={cn("inline-flex min-w-9 items-center justify-center rounded-md px-1.5 py-1 tabular-nums", q ? "font-semibold" : "text-muted-foreground")} style={q ? { backgroundColor: `color-mix(in srgb, var(--primary) ${Math.round(15 + 70 * (q / max))}%, transparent)`, color: q / max >= 0.5 ? "var(--navy)" : "var(--heading)" } : undefined}>{q || "·"}</span></td>;
                       })}
                       <td className="px-3 py-2 text-right font-semibold tabular-nums text-heading">{r.total}</td>
                       <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{r.received || "–"}</td>
@@ -83,7 +87,7 @@ export default async function AuswertungPage({ searchParams }: PageProps<"/auswe
                 })}
               </tbody>
             </table>
-          </section>
+          </ScrollEnd>
           <p className="text-xs text-muted-foreground">Die Tage sind Berliner Kalendertage. „Eingang“ ist die im Zeitraum angelieferte Menge, zum Vergleich mit dem Verbrauch.</p>
         </>
       )}

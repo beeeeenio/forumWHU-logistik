@@ -109,11 +109,11 @@ export function ImportWizard({ draftId, kind, sheets }: { draftId: string; kind:
         <h2 className="text-lg">Optionen</h2>
         {kind === "stock" ? (
           <fieldset className="space-y-2"><legend className="label">Menge bedeutet</legend>
-            <label className="flex items-start gap-2 text-sm"><input type="radio" checked={stockMode === "set"} onChange={() => { setStockMode("set"); touch(); }} className="mt-1 size-4" /><span><strong>Gezählter Bestand</strong> – der Bestand wird auf diese Menge gesetzt (Anfangsbestand, Inventurliste).</span></label>
-            <label className="flex items-start gap-2 text-sm"><input type="radio" checked={stockMode === "add"} onChange={() => { setStockMode("add"); touch(); }} className="mt-1 size-4" /><span><strong>Dazu buchen</strong> – die Menge wird zum vorhandenen Bestand addiert.</span></label>
+            <label className="flex min-h-11 items-start gap-2 text-sm"><input type="radio" checked={stockMode === "set"} onChange={() => { setStockMode("set"); touch(); }} className="mt-1 size-4" /><span><strong>Gezählter Bestand</strong> – der Bestand wird auf diese Menge gesetzt (Anfangsbestand, Inventurliste).</span></label>
+            <label className="flex min-h-11 items-start gap-2 text-sm"><input type="radio" checked={stockMode === "add"} onChange={() => { setStockMode("add"); touch(); }} className="mt-1 size-4" /><span><strong>Dazu buchen</strong> – die Menge wird zum vorhandenen Bestand addiert.</span></label>
           </fieldset>
         ) : (
-          <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={updateExisting} onChange={(e) => { setUpdateExisting(e.target.checked); touch(); }} className="mt-1 size-4" /><span><strong>Vorhandene aktualisieren</strong> – gleicher Name (bei Orten auch Kurzcode): ausgefüllte Zellen überschreiben, leere lassen den Wert unverändert. Ohne Haken bleiben vorhandene unberührt.</span></label>
+          <label className="flex min-h-11 items-start gap-2 text-sm"><input type="checkbox" checked={updateExisting} onChange={(e) => { setUpdateExisting(e.target.checked); touch(); }} className="mt-1 size-4" /><span><strong>Vorhandene aktualisieren</strong> – gleicher Name (bei Orten auch Kurzcode): ausgefüllte Zellen überschreiben, leere lassen den Wert unverändert. Ohne Haken bleiben vorhandene unberührt.</span></label>
         )}
       </section>
 

@@ -25,7 +25,7 @@ export function ThemeToggle({ className }: { className?: string }) {
     <div role="radiogroup" aria-label="Darstellung" className={className ?? "inline-flex rounded-xl border bg-card p-1"}>
       {items.map(({ t, icon: Icon, label }) => (
         <button key={t} type="button" role="radio" aria-checked={theme === t} aria-label={label} onClick={() => set(t)}
-          className={`flex min-h-9 min-w-9 items-center justify-center rounded-lg px-2 text-xs ${theme === t ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-heading"}`}>
+          className={`flex min-h-11 min-w-11 items-center justify-center rounded-lg px-2 text-xs ${theme === t ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-heading"}`}>
           <Icon className="size-4" />
         </button>
       ))}

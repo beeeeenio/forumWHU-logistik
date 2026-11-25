@@ -18,7 +18,7 @@ export default async function QrPage({ searchParams }: PageProps<"/qr">) {
   const chosen = idsParam.length ? all.filter((l) => idsParam.includes(l.id)) : all;
   const labels = await Promise.all(chosen.map(async (l) => ({ loc: l, svg: await qrSvg(locationUrl(l.id)) })));
   return (
-    <div className="page space-y-5">
+    <div className="page space-y-5 overflow-x-clip">
       <div className="flex flex-wrap items-end justify-between gap-3 print:hidden">
         <div><h1 className="h1">QR-Etiketten</h1><p className="text-sm text-muted-foreground">Ausdrucken, laminieren, an die Tür oder das Regal kleben. Scannen öffnet den Ort: Inhalt sehen, Eingang buchen, umlagern, Inventur. Nur eingeloggte Teammitglieder sehen etwas.</p></div>
         <PrintButton><Printer className="size-4" />Drucken</PrintButton>

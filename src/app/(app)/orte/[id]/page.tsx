@@ -13,6 +13,12 @@ import { fmtRelativeDay } from "@/lib/time";
 import { fmtQty } from "@/lib/format";
 import { JOURNAL_INCLUDE, getLocationStock } from "@/services/reports";
 
+export async function generateMetadata({ params }: PageProps<"/orte/[id]">) {
+  const { id } = await params;
+  const loc = /^[0-9a-f-]{36}$/.test(id) ? await prisma.location.findUnique({ where: { id }, select: { name: true } }) : null;
+  return { title: loc?.name ?? "Lagerort" };
+}
+
 export default async function OrtPage({ params }: PageProps<"/orte/[id]">) {
   const user = await requireUser();
   const { id } = await params;
@@ -92,7 +98,7 @@ export default async function OrtPage({ params }: PageProps<"/orte/[id]">) {
       )}
 
       <section className="space-y-3">
-        <div className="flex items-center justify-between"><h2 className="text-xl">Zuletzt hier gebucht</h2><Link href={`/journal?location=${id}`} className="text-sm underline">Alle</Link></div>
+        <div className="flex items-center justify-between"><h2 className="text-xl">Zuletzt hier gebucht</h2><Link href={`/journal?location=${id}`} className="inline-flex min-h-11 items-center px-2 text-sm underline">Alle</Link></div>
         {moves.length === 0 ? <p className="text-sm text-muted-foreground">Noch keine Buchungen.</p> : <ul className="space-y-3">{moves.map((m) => <MovementRow key={m.id} m={m} locations={locations} canWrite={writer} copyHref={buchenHref({ copy: m.id })} />)}</ul>}
       </section>
     </div>
