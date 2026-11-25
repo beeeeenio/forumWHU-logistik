@@ -43,7 +43,7 @@ await b({ kind: "CONSUME", articleId: saft.id, quantity: 6, fromLocationId: KL1,
 await submitCount(user, L004, [{ articleId: brot.id, state: "FULL", counted: 18 }, { articleId: saft.id, state: "FULL", counted: 8 }], "Demo");
 
 // Pläne: einer überfällig, einer morgen früh, einer übermorgen
-const plan = (hours: number, p: Parameters<typeof createPlan>[1]) => createPlan(user, { ...p, dueAt: new Date(Date.now() + hours * 3600_000) });
+const plan = (hours: number, p: Omit<Parameters<typeof createPlan>[1], "dueAt">) => createPlan(user, { ...p, dueAt: new Date(Date.now() + hours * 3600_000) });
 await plan(-3, { articleId: wein.id, quantity: 6, state: "FULL", fromLocationId: GK, toLocationId: SH, phase: "Weinprobe Freitag", note: "Demo: überfällig", });
 await plan(14, { articleId: wasser.id, quantity: 23, state: "FULL", fromLocationId: KA, toLocationId: KL1, phase: "Frühstück Freitag", note: null });
 await plan(38, { articleId: wasser.id, quantity: 20, state: "EMPTY", fromLocationId: L004, toLocationId: SH, phase: "Leergut Samstag", note: null });
