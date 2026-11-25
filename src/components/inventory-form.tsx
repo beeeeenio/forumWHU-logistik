@@ -13,11 +13,12 @@ export interface InvRow { articleId: string; name: string; unit: string; returna
 export interface InvArticle { id: string; name: string; unit: string; returnable: boolean }
 
 /** Zählliste eines Ortes: Zahl eintragen (oder „stimmt“ tippen), nur Abweichungen werden gebucht. */
-export function InventoryForm({ locationId, locationName, initial, articles }: { locationId: string; locationName: string; initial: InvRow[]; articles: InvArticle[] }) {
+export function InventoryForm({ locationId, locationName, initial, articles, startedAt }: { locationId: string; locationName: string; initial: InvRow[]; articles: InvArticle[]; startedAt: string }) {
   const [rows, setRows] = useState<InvRow[]>(initial);
   const [counts, setCounts] = useState<Record<string, string>>({});
   const [note, setNote] = useState("");
   const [review, setReview] = useState(false);
+  const [blind, setBlind] = useState(false);
   const [result, formAction, pending] = useActionState(inventoryAction, null);
   const key = (r: Pick<InvRow, "articleId" | "state">) => r.articleId + r.state;
 
@@ -34,7 +35,7 @@ export function InventoryForm({ locationId, locationName, initial, articles }: {
 
   function submit() {
     const fd = new FormData();
-    fd.set("payload", JSON.stringify({ locationId, note, rows: entered.map((r) => ({ articleId: r.articleId, state: r.state, counted: parseInt(counts[key(r)], 10) })) }));
+    fd.set("payload", JSON.stringify({ locationId, note, startedAt, rows: entered.map((r) => ({ articleId: r.articleId, state: r.state, counted: parseInt(counts[key(r)], 10) })) }));
     startTransition(() => formAction(fd));
   }
 
@@ -79,6 +80,10 @@ export function InventoryForm({ locationId, locationName, initial, articles }: {
 
   return (
     <div className="space-y-4">
+      <label className="card flex items-start gap-3 p-3 text-sm">
+        <input type="checkbox" checked={blind} onChange={(e) => setBlind(e.target.checked)} className="mt-0.5 size-5" />
+        <span><strong className="text-heading">Blind zählen</strong><span className="block text-muted-foreground">Der gebuchte Bestand wird ausgeblendet, damit du unvoreingenommen zählst. Die Abweichungen siehst du danach in der Prüfung.</span></span>
+      </label>
       {rows.length === 0 && <p className="card border-dashed p-5 text-center text-sm text-muted-foreground">Hier ist nichts gebucht. Füge unten Artikel hinzu, die du hier findest.</p>}
       <ul className="space-y-2">
         {rows.map((r) => {
@@ -87,14 +92,14 @@ export function InventoryForm({ locationId, locationName, initial, articles }: {
           const n = parseInt(v, 10);
           const diff = v !== "" && Number.isFinite(n) ? n - r.current : null;
           return (
-            <li key={k} className={cn("card flex flex-wrap items-center justify-between gap-3 p-3", diff !== null && diff !== 0 && "border-warn/60")}>
+            <li key={k} className={cn("card flex flex-wrap items-center justify-between gap-3 p-3", !blind && diff !== null && diff !== 0 && "border-warn/60")}>
               <div className="min-w-0">
                 <p className="font-medium text-heading">{r.name}{r.returnable && <span className="ml-2 chip-muted">{r.state === "FULL" ? "voll" : "leer"}</span>}</p>
-                <p className="text-sm text-muted-foreground">Gebucht: {fmtQty(r.current, r.unit)}</p>
+                {blind ? <p className="text-sm text-muted-foreground">Bitte zählen, was da ist</p> : <p className="text-sm text-muted-foreground">Gebucht: {fmtQty(r.current, r.unit)}</p>}
               </div>
               <div className="flex items-center gap-2">
-                {diff !== null && diff !== 0 && <span className={cn("text-sm font-semibold tabular-nums", diff > 0 ? "text-ok" : "text-danger")}>{diff > 0 ? "+" : ""}{diff}</span>}
-                <button type="button" className="btn-secondary btn-sm" onClick={() => setCounts((c) => ({ ...c, [k]: String(r.current) }))}>stimmt</button>
+                {!blind && diff !== null && diff !== 0 && <span className={cn("text-sm font-semibold tabular-nums", diff > 0 ? "text-ok" : "text-danger")}>{diff > 0 ? "+" : ""}{diff}</span>}
+                {!blind && <button type="button" className="btn-secondary btn-sm" onClick={() => setCounts((c) => ({ ...c, [k]: String(r.current) }))}>stimmt</button>}
                 <input value={v} onChange={(e) => setCounts((c) => ({ ...c, [k]: e.target.value.replace(/[^\d]/g, "") }))} inputMode="numeric" pattern="[0-9]*" placeholder="gezählt" aria-label={`Gezählt: ${r.name}`} className="field w-24 text-center text-lg font-semibold tabular-nums" />
               </div>
             </li>

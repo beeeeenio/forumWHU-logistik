@@ -1,9 +1,11 @@
 "use client";
 
-import { Check, Mic, Minus, Plus, Sparkles, Trash2, TriangleAlert } from "lucide-react";
+import { Check, Mic, Minus, Plus, Sparkles, Trash2, TriangleAlert, Undo2 } from "lucide-react";
 import Link from "next/link";
 import { startTransition, useActionState, useEffect, useMemo, useRef, useState } from "react";
-import { bookAction, quickParseAction } from "@/app/actions/book";
+import { bookAction, quickParseAction, undoBookedAction } from "@/app/actions/book";
+import type { ActionResult } from "@/lib/action-result";
+import { afterLines, unusualQuantity } from "@/lib/domain/preview";
 import { KIND_HELP, KIND_LABEL, MOVEMENT_KINDS, STATE_LABEL, type MovementKind, type StockState } from "@/lib/domain/rules";
 import { fmtQty, singularUnit } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -15,6 +17,8 @@ export interface BookCatalog {
   suppliers: string[];
   /** Aktueller Bestand für den Hinweis „hier liegen gerade …“ (die Prüfung macht der Server) */
   stock: { a: string; l: string; s: StockState; q: number }[];
+  /** Übliche Menge je Artikel (Median der letzten Buchungen) für die Warnung bei Ausreißern */
+  typical: Record<string, number>;
 }
 
 export interface Draft {
@@ -147,6 +151,12 @@ function DraftEditor({ d, index, total, catalog, set, remove }: { d: Draft; inde
   const showState = returnable && (d.kind === "TRANSFER" || d.kind === "WRITE_OFF" || d.kind === "ADJUST");
   const have = article && d.from && needsFrom ? stockOf(catalog, article.id, d.from, fromState) : null;
   const short = have !== null && d.kind !== "ADJUST" && Number.isFinite(qty) && qty > have;
+  const nameOf = (id: string) => catalog.locations.find((l) => l.id === id)?.label ?? "?";
+  const stockHere = (loc: string, s: StockState) => (article ? stockOf(catalog, article.id, loc, s) : 0);
+  const after = (article || d.articleId === "__new") && Number.isFinite(qty)
+    ? afterLines({ kind: d.kind, quantity: qty, state: fromState, fromId: needsFrom && d.from ? d.from : d.kind === "RECEIPT" ? null : null, toId: needsTo && d.to ? d.to : null, returnable, stockOf: stockHere, nameOf })
+    : [];
+  const unusual = Boolean(article && unusualQuantity(qty, catalog.typical[article.id]));
   const cooling = article?.needsCooling && d.to && catalog.locations.find((l) => l.id === d.to) && !catalog.locations.find((l) => l.id === d.to)!.cooled && (d.kind === "RECEIPT" || d.kind === "TRANSFER");
 
   return (
@@ -230,6 +240,13 @@ function DraftEditor({ d, index, total, catalog, set, remove }: { d: Draft; inde
           {short && <TriangleAlert className="mr-1 inline size-4" />}Dort sind gerade {fmtQty(have, unit)} {returnable ? STATE_LABEL[fromState] : ""} gebucht{short ? " – das reicht nicht für diese Menge." : "."}
         </p>
       )}
+      {after.length > 0 && (
+        <div className="rounded-xl bg-muted p-3 text-sm" aria-live="polite">
+          <p className="label !mb-1">Bestand danach</p>
+          <ul className="space-y-0.5">{after.map((l, i) => <li key={i} className={cn("tabular-nums", l.warn ? "font-medium text-danger" : "text-foreground")}>{l.warn && <TriangleAlert className="mr-1 inline size-4" />}{l.text}</li>)}</ul>
+        </div>
+      )}
+      {unusual && article && <p className="text-sm text-warn"><TriangleAlert className="mr-1 inline size-4" />Das ist deutlich mehr als sonst (üblich: etwa {Math.round(catalog.typical[article.id])} {unit}). Stimmt die Zahl?</p>}
       {cooling && <p className="text-sm text-warn"><TriangleAlert className="mr-1 inline size-4" />Dieser Artikel braucht Kühlung, der Zielort ist nicht gekühlt.</p>}
 
       <details className="text-sm">
@@ -245,11 +262,17 @@ export function BookPanel({ catalog, initial }: { catalog: BookCatalog; initial:
   const [result, formAction, pending] = useActionState(bookAction, null);
   const [force, setForce] = useState(false);
   const lastNonce = useRef<number | undefined>(undefined);
+  // Kennung dieser Erfassung: bleibt bei Doppeltipp/Wiederholung gleich (bucht nie zweimal), neu nach jeder Änderung und nach Erfolg
+  const keyRef = useRef<string | null>(null);
+  const [undoRes, setUndoRes] = useState<ActionResult | null>(null);
+  const [undoing, setUndoing] = useState(false);
 
   // Nach einem Erfolg: Maske leeren (Art der letzten Buchung bleibt – man bucht oft mehrere gleiche hintereinander)
   useEffect(() => {
     if (result?.ok && result.nonce && result.nonce !== lastNonce.current) {
       lastNonce.current = result.nonce;
+      keyRef.current = null;
+      setUndoRes(null);
       setDrafts((cur) => [blankDraft({ kind: cur[0]?.kind ?? "RECEIPT" })]);
       setForce(false);
     }
@@ -272,14 +295,25 @@ export function BookPanel({ catalog, initial }: { catalog: BookCatalog; initial:
     })),
   }), [drafts, force]);
 
-  const patch = (key: string, p: Partial<Draft>) => setDrafts((cur) => cur.map((d) => (d.key === key ? { ...d, ...p, warnings: p.warnings ?? d.warnings } : d)));
+  const patch = (key: string, p: Partial<Draft>) => { keyRef.current = null; setDrafts((cur) => cur.map((d) => (d.key === key ? { ...d, ...p, warnings: p.warnings ?? d.warnings } : d))); };
   const ready = drafts.every((d) => Number.isFinite(parseInt(d.quantity, 10)) && (d.articleId && (d.articleId !== "__new" || d.newName.trim().length >= 2)));
 
+  const unusualAny = drafts.some((d) => { const a = catalog.articles.find((x) => x.id === d.articleId); return Boolean(a && unusualQuantity(parseInt(d.quantity, 10), catalog.typical[a.id])); });
+
   function submit(withForce: boolean) {
+    if (!withForce && unusualAny && !window.confirm("Mindestens eine Menge ist deutlich größer als sonst üblich. Trotzdem buchen?")) return;
     setForce(withForce);
+    keyRef.current ??= crypto.randomUUID();
     const fd = new FormData();
-    fd.set("payload", JSON.stringify({ ...JSON.parse(payload), force: withForce }));
+    fd.set("payload", JSON.stringify({ ...JSON.parse(payload), force: withForce, requestKey: keyRef.current }));
     startTransition(() => formAction(fd));
+  }
+
+  async function undo() {
+    if (!result?.ids) return;
+    setUndoing(true);
+    setUndoRes(await undoBookedAction(result.ids));
+    setUndoing(false);
   }
 
   return (
@@ -290,16 +324,20 @@ export function BookPanel({ catalog, initial }: { catalog: BookCatalog; initial:
         <div role="status" className="rounded-2xl border border-ok/40 bg-ok/10 p-4 text-ok">
           <p className="flex items-center gap-2 font-medium"><Check className="size-5" />{result.message}</p>
           <ul className="mt-1 list-inside list-disc text-sm">{result.lines?.map((l, i) => <li key={i}>{l}</li>)}</ul>
-          <p className="mt-2 text-sm"><Link href="/journal" className="underline">Im Journal ansehen (dort auch stornieren)</Link> · <Link href="/" className="underline">Zur Lage</Link></p>
+          <p className="mt-2 text-sm"><Link href="/journal" className="underline">Im Journal ansehen</Link> · <Link href="/" className="underline">Zur Lage</Link></p>
+          {result.ids && !result.duplicate && !undoRes?.ok && (
+            <button type="button" onClick={undo} disabled={undoing} className="btn-secondary btn-sm mt-3 text-heading"><Undo2 className="size-4" />{undoing ? "Nehme zurück …" : "Falsch? Sofort rückgängig machen"}</button>
+          )}
+          {undoRes && <Feedback result={undoRes} />}
         </div>
       )}
       {result?.ok && result.warnings?.map((w, i) => <p key={i} className="rounded-xl bg-warn/10 p-3 text-sm text-warn">{w}</p>)}
 
       <div className="space-y-4">
         {drafts.map((d, i) => (
-          <DraftEditor key={d.key} d={d} index={i} total={drafts.length} catalog={catalog} set={(p) => patch(d.key, p)} remove={() => setDrafts((cur) => cur.filter((x) => x.key !== d.key))} />
+          <DraftEditor key={d.key} d={d} index={i} total={drafts.length} catalog={catalog} set={(p) => patch(d.key, p)} remove={() => { keyRef.current = null; setDrafts((cur) => cur.filter((x) => x.key !== d.key)); }} />
         ))}
-        <button type="button" onClick={() => setDrafts((cur) => [...cur, blankDraft({ kind: cur.at(-1)?.kind })])} className="btn-secondary w-full"><Plus className="size-4" />Weitere Zeile</button>
+        <button type="button" onClick={() => { keyRef.current = null; setDrafts((cur) => [...cur, blankDraft({ kind: cur.at(-1)?.kind })]); }} className="btn-secondary w-full"><Plus className="size-4" />Weitere Zeile</button>
       </div>
 
       {result && !result.ok && (

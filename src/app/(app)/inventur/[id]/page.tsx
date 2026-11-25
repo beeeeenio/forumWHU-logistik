@@ -39,7 +39,7 @@ export default async function InventurOrtPage({ params }: PageProps<"/inventur/[
         <p className="text-sm text-muted-foreground">{pathName(locations, id)} · Trag ein, was du wirklich siehst. „stimmt“ übernimmt die gebuchte Zahl.</p>
         {children.length > 0 && <p className="mt-2 text-sm">Unterorte separat zählen: {children.map((c) => <Link key={c.id} href={`/inventur/${c.id}`} className="mr-2 underline">{c.name}</Link>)}</p>}
       </div>
-      <InventoryForm key={id} locationId={id} locationName={loc.name} initial={initial} articles={articles.map((a) => ({ id: a.id, name: a.name, unit: a.unit, returnable: a.returnable }))} />
+      <InventoryForm key={id} startedAt={new Date().toISOString()} locationId={id} locationName={loc.name} initial={initial} articles={articles.map((a) => ({ id: a.id, name: a.name, unit: a.unit, returnable: a.returnable }))} />
       <section className="space-y-3 pt-4"><h2 className="text-xl">Letzte Inventuren hier</h2><InventoryRuns runs={runs} canWrite showLocation={false} /></section>
     </div>
   );

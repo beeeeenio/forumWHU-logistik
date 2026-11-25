@@ -9,6 +9,7 @@ import { submitCount, voidInventory } from "@/services/inventory";
 const schema = z.object({
   locationId: z.uuid(),
   note: z.string().max(200).default(""),
+  startedAt: z.iso.datetime().optional(),
   rows: z.array(z.object({ articleId: z.uuid(), state: z.enum(["FULL", "EMPTY"]), counted: z.number().int() })).min(1).max(300),
 });
 
@@ -19,7 +20,7 @@ export async function inventoryAction(_prev: ActionResult | null, fd: FormData):
   let p;
   try { p = schema.safeParse(JSON.parse(String(fd.get("payload") ?? ""))); } catch { return fail("Die Eingabe konnte nicht gelesen werden."); }
   if (!p.success) return fail("Bitte mindestens eine Menge eintragen (ganze Zahlen).");
-  const r = await submitCount(user, p.data.locationId, p.data.rows, p.data.note);
+  const r = await submitCount(user, p.data.locationId, p.data.rows, p.data.note, p.data.startedAt ? new Date(p.data.startedAt) : null);
   if (!r.ok) return fail(r.error);
   revalidatePath("/", "layout");
   return {

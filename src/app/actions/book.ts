@@ -10,7 +10,7 @@ import { fmtQty } from "@/lib/format";
 import { actionUser } from "@/lib/session";
 import { fromBerlinInput } from "@/lib/time";
 import { pathName } from "@/lib/domain/tree";
-import { bookMovements, voidMovement, type BookInput } from "@/services/movements";
+import { bookMovements, voidMovement, voidRecent, type BookInput } from "@/services/movements";
 import { cancelPlan, completePlan, createPlan, deletePlan } from "@/services/plans";
 
 const id = z.uuid();
@@ -30,7 +30,7 @@ const draftSchema = z.object({
   occurredAt: optText(32),
   source: z.enum(["ui", "quick"]).default("ui"),
 });
-const bookSchema = z.object({ rows: z.array(draftSchema).min(1).max(100), force: z.boolean().default(false) });
+const bookSchema = z.object({ rows: z.array(draftSchema).min(1).max(100), force: z.boolean().default(false), requestKey: z.uuid().optional() });
 
 /** Schnellerfassung: Text → Entwürfe (nur Vorschläge, es wird nichts gebucht). */
 export async function quickParseAction(text: string): Promise<{ ok: true; drafts: ParsedDraft[] } | { ok: false; error: string }> {
@@ -84,10 +84,11 @@ export async function bookAction(_prev: ActionResult | null, formData: FormData)
       force: parsed.data.force,
     });
   }
-  const res = await bookMovements(user, inputs);
+  const res = await bookMovements(user, inputs, { requestKey: parsed.data.requestKey ?? null });
   if (!res.ok) return { ok: false, error: (inputs.length > 1 && res.index !== undefined ? `Zeile ${res.index + 1}: ` : "") + res.error, code: res.code, index: res.index };
 
   revalidatePath("/", "layout");
+  if (res.duplicate) return { ok: true, message: "Das war schon gespeichert – es wurde nichts doppelt gebucht.", ids: res.ids, duplicate: true, nonce: Date.now() };
   const [articles, locations] = await Promise.all([prisma.article.findMany(), prisma.location.findMany()]);
   const lines = inputs.map((i) => {
     const a = articles.find((x) => x.id === i.articleId) ?? articles.find((x) => x.name.toLowerCase() === i.newArticle?.name.trim().toLowerCase());
@@ -96,7 +97,7 @@ export async function bookAction(_prev: ActionResult | null, formData: FormData)
     const q = i.kind === "ADJUST" ? `gezählt ${i.quantity}` : fmtQty(i.quantity, a?.unit ?? "Stück");
     return `${KIND_LABEL[i.kind]}${i.state === "EMPTY" ? " (leer)" : ""}: ${q} ${a?.name ?? ""} ${route}`.replace(/\s+/g, " ");
   });
-  return { ok: true, message: inputs.length === 1 ? "Gebucht." : `${inputs.length} Buchungen gebucht.`, lines, warnings: res.warnings, nonce: Date.now() };
+  return { ok: true, message: inputs.length === 1 ? "Gebucht." : `${inputs.length} Buchungen gebucht.`, lines, warnings: res.warnings, ids: res.ids, nonce: Date.now() };
 }
 
 export async function voidAction(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
@@ -157,3 +158,15 @@ export async function planCancelAction(_prev: ActionResult | null, formData: For
   return { ok: true, message: "Erledigt." };
 }
 
+
+/** Direkt nach dem Buchen: eigene Buchungen der letzten 15 Minuten sofort zurücknehmen. */
+export async function undoBookedAction(ids: string[]): Promise<ActionResult> {
+  const user = await actionUser("write");
+  if (!user) return NOT_ALLOWED;
+  const parsed = z.array(id).min(1).max(100).safeParse(ids);
+  if (!parsed.success) return fail("Buchungen nicht gefunden.");
+  const r = await voidRecent(user, parsed.data);
+  if (!r.ok) return fail(r.error);
+  revalidatePath("/", "layout");
+  return { ok: true, message: "Rückgängig gemacht – die Buchung zählt nicht mehr (im Journal bleibt sie durchgestrichen sichtbar).", warnings: r.warnings };
+}

@@ -221,6 +221,9 @@ model Movement {
   voidedAt       DateTime?     @map("voided_at")
   voidedById     String?       @map("voided_by_id") @db.Uuid
   voidReason     String?       @map("void_reason")
+  /// Kennung der Erfassung (vom Formular erzeugt): dieselbe Kennung bucht nie zweimal (Doppeltipp, Wiederholung nach Funkloch)
+  requestKey     String?       @map("request_key")
+  requestIndex   Int?          @map("request_index")
 
   article      Article   @relation(fields: [articleId], references: [id], onDelete: Restrict)
   fromLocation Location? @relation("MovementFrom", fields: [fromLocationId], references: [id], onDelete: Restrict)
@@ -236,6 +239,7 @@ model Movement {
   @@index([toLocationId])
   @@index([occurredAt])
   @@index([batchId])
+  @@unique([requestKey, requestIndex])
   @@map("movements")
 }
 

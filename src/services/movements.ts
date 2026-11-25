@@ -30,7 +30,7 @@ export interface BookInput {
 }
 
 export type BookResult =
-  | { ok: true; ids: string[]; warnings: string[] }
+  | { ok: true; ids: string[]; warnings: string[]; /** diese Erfassung war schon gespeichert – es wurde nichts doppelt gebucht */ duplicate?: boolean }
   | { ok: false; code: "INVALID" | "INSUFFICIENT" | "FORBIDDEN"; error: string; index?: number };
 
 class Rollback extends Error {
@@ -49,7 +49,7 @@ async function locationName(tx: Tx, id: string): Promise<string> {
   return l ? l.name + (l.code && l.code !== l.name ? ` (${l.code})` : "") : "?";
 }
 
-async function bookOne(tx: Tx, user: User, input: BookInput, batchId: string | null, index: number): Promise<{ id: string; warnings: string[] }> {
+async function bookOne(tx: Tx, user: User, input: BookInput, batchId: string | null, index: number, requestKey: string | null = null): Promise<{ id: string; warnings: string[] }> {
   const fail = (code: "INVALID" | "INSUFFICIENT", error: string) => new Rollback({ ok: false, code, error, index });
   const warnings: string[] = [];
 
@@ -131,17 +131,19 @@ async function bookOne(tx: Tx, user: User, input: BookInput, batchId: string | n
       note: clean(input.note) || null,
       source: input.source ?? "ui",
       createdById: user.id,
+      requestKey,
+      requestIndex: requestKey ? index : null,
     },
   });
   return { id: m.id, warnings };
 }
 
 /** Bucht Zeilen innerhalb einer bereits offenen Transaktion (z. B. Import). Wirft `BookingRollback`, dann ist alles zurückzurollen. */
-export async function bookInTx(tx: Tx, user: User, inputs: BookInput[], batchId: string | null): Promise<{ ids: string[]; warnings: string[] }> {
+export async function bookInTx(tx: Tx, user: User, inputs: BookInput[], batchId: string | null, requestKey: string | null = null): Promise<{ ids: string[]; warnings: string[] }> {
   const ids: string[] = [];
   const warnings: string[] = [];
   for (let i = 0; i < inputs.length; i++) {
-    const r = await bookOne(tx, user, inputs[i], batchId, i);
+    const r = await bookOne(tx, user, inputs[i], batchId, i, requestKey);
     ids.push(r.id);
     warnings.push(...r.warnings);
   }
@@ -149,15 +151,29 @@ export async function bookInTx(tx: Tx, user: User, inputs: BookInput[], batchId:
 }
 export { Rollback as BookingRollback };
 
-/** Bucht eine oder mehrere Bewegungen in EINER Transaktion: entweder alle oder keine (z. B. eine ganze Lieferung). */
-export async function bookMovements(user: User, inputs: BookInput[], opts: { batchId?: string } = {}): Promise<BookResult> {
+/**
+ * Bucht eine oder mehrere Bewegungen in EINER Transaktion: entweder alle oder keine (z. B. eine ganze Lieferung).
+ * Mit `requestKey` (vom Formular erzeugt) ist die Erfassung idempotent: dieselbe Kennung bucht nie ein zweites Mal – ein Doppeltipp
+ * oder eine Wiederholung nach einem Funkloch liefert das Ergebnis der ersten Buchung zurück.
+ */
+export async function bookMovements(user: User, inputs: BookInput[], opts: { batchId?: string; requestKey?: string | null } = {}): Promise<BookResult> {
   if (!inputs.length) return { ok: false, code: "INVALID", error: "Nichts zu buchen." };
   if (inputs.length > 100) return { ok: false, code: "INVALID", error: "Höchstens 100 Zeilen auf einmal." };
+  const requestKey = opts.requestKey ?? null;
+  const already = async (): Promise<BookResult | null> => {
+    if (!requestKey) return null;
+    const prev = await prisma.movement.findMany({ where: { requestKey, createdById: user.id }, orderBy: { requestIndex: "asc" }, select: { id: true } });
+    return prev.length ? { ok: true, ids: prev.map((p) => p.id), warnings: [], duplicate: true } : null;
+  };
+  const dup = await already();
+  if (dup) return dup;
   const batchId = opts.batchId ?? (inputs.length > 1 ? crypto.randomUUID() : null);
   try {
-    return await prisma.$transaction(async (tx) => ({ ok: true as const, ...(await bookInTx(tx, user, inputs, batchId)) }), { timeout: 20_000 });
+    return await prisma.$transaction(async (tx) => ({ ok: true as const, ...(await bookInTx(tx, user, inputs, batchId, requestKey)) }), { timeout: 20_000 });
   } catch (e) {
     if (e instanceof Rollback) return e.result;
+    // Zwei gleichzeitige Anfragen mit derselben Kennung: die zweite scheitert an der Eindeutigkeit und bekommt das Ergebnis der ersten
+    if (requestKey && e && typeof e === "object" && "code" in e && (e as { code?: string }).code === "P2002") { const d = await already(); if (d) return d; }
     throw e;
   }
 }
@@ -184,6 +200,15 @@ export async function voidMovement(user: User, movementId: string, reason: strin
     }
     return { ok: true as const, warnings };
   });
+}
+
+/** Sofort rückgängig: nur eigene Buchungen der letzten 15 Minuten (für Fehleingaben direkt nach dem Buchen). */
+export async function voidRecent(user: User, ids: string[], maxAgeMs = 15 * 60_000): Promise<VoidResult> {
+  const rows = await prisma.movement.findMany({ where: { id: { in: ids.slice(0, 100) }, createdById: user.id, voidedAt: null, createdAt: { gte: new Date(Date.now() - maxAgeMs) } }, select: { id: true } });
+  if (!rows.length) return { ok: false, error: "Sofort rückgängig geht nur für eigene Buchungen der letzten 15 Minuten. Ältere kannst du im Journal stornieren." };
+  const warnings: string[] = [];
+  for (const r of rows) { const res = await voidMovement(user, r.id, "Sofort rückgängig gemacht"); if (!res.ok) return res; warnings.push(...res.warnings); }
+  return { ok: true, warnings };
 }
 
 export { KIND_LABEL };

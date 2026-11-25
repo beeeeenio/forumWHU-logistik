@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "@/db/prisma";
 import type { BookCatalog } from "@/components/book-panel";
 import { buildTree, flatten, isCooled, pathName } from "@/lib/domain/tree";
+import { Prisma } from "@/generated/prisma/client";
 import { stockRows } from "./stock";
 
 /** Auswahllisten für Formulare: aktive Artikel/Orte/Lieferanten (Orte in Baumreihenfolge mit vollem Pfad) und der aktuelle Bestand. */
@@ -12,12 +13,21 @@ export async function loadCatalog(withStock = true): Promise<BookCatalog> {
     prisma.supplier.findMany({ where: { archivedAt: null }, orderBy: { name: "asc" } }),
     withStock ? stockRows(prisma) : Promise.resolve([]),
   ]);
+  // Übliche Menge je Artikel = Median der letzten 15 Buchungen (ab 3 Buchungen) – Grundlage der Warnung bei auffällig großen Mengen
+  const typicalRows = withStock
+    ? await prisma.$queryRaw<{ article_id: string; med: number }[]>(Prisma.sql`
+        select article_id, percentile_cont(0.5) within group (order by quantity)::float as med
+        from (select article_id, quantity, row_number() over (partition by article_id order by occurred_at desc) rn
+              from movements where voided_at is null and kind::text in ('RECEIPT','TRANSFER','CONSUME')) t
+        where rn <= 15 group by article_id having count(*) >= 3`)
+    : [];
   const active = locations.filter((l) => !l.archivedAt);
   const ordered = flatten(buildTree(active)).map((n) => n.loc);
   return {
     articles: articles.map((a) => ({ id: a.id, name: a.name, unit: a.unit, returnable: a.returnable, needsCooling: a.needsCooling })),
     locations: ordered.map((l) => ({ id: l.id, label: pathName(locations, l.id) + (l.code && l.code !== l.name ? ` · ${l.code}` : ""), cooled: isCooled(locations, l.id) })),
     suppliers: suppliers.map((s) => s.name),
+    typical: Object.fromEntries(typicalRows.map((r) => [r.article_id, r.med])),
     stock: stock.filter((r) => r.quantity !== 0).map((r) => ({ a: r.articleId, l: r.locationId, s: r.state, q: r.quantity })),
   };
 }

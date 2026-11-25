@@ -258,3 +258,84 @@ test("Inventur zurücknehmen: ganze Zählung wird storniert, Bestand wie vorher,
   const one = await submitCount(user, L004.id, [{ articleId: brot.id, state: "FULL", counted: b0 + 1 }], "");
   assert.ok(one.ok && one.batchId);
 });
+
+test("Doppelbuchung: dieselbe Kennung bucht nie zweimal (auch parallel)", async () => {
+  const { user, wasser, L004 } = d;
+  const before = await q(wasser.id, L004.id, "FULL");
+  const key = crypto.randomUUID();
+  const input = { kind: "RECEIPT" as const, articleId: wasser.id, quantity: 4, toLocationId: L004.id };
+  const results = await Promise.all([bookMovements(user, [input], { requestKey: key }), bookMovements(user, [input], { requestKey: key }), bookMovements(user, [input], { requestKey: key })]);
+  assert.ok(results.every((r) => r.ok));
+  assert.equal(await q(wasser.id, L004.id, "FULL"), before + 4, "nur einmal gebucht");
+  assert.equal(await prisma.movement.count({ where: { requestKey: key } }), 1);
+  const again = await bookMovements(user, [input], { requestKey: key });
+  assert.ok(again.ok && again.duplicate);
+  // mehrzeilige Erfassung: alle Zeilen unter einer Kennung
+  const key2 = crypto.randomUUID();
+  const two = [input, { ...input, quantity: 1 }];
+  assert.ok((await bookMovements(user, two, { requestKey: key2 })).ok);
+  const second = await bookMovements(user, two, { requestKey: key2 });
+  assert.ok(second.ok && second.duplicate && second.ids.length === 2);
+  assert.equal(await q(wasser.id, L004.id, "FULL"), before + 4 + 5);
+  // eine andere Person kann die Kennung nicht „übernehmen“
+  const other = await prisma.user.create({ data: { email: "dup@x.de", normalizedEmail: "dup@x.de", displayName: "Dup", role: "MEMBER", status: "ACTIVE" } });
+  const hijack = await bookMovements(other, [input], { requestKey: key }).catch((e) => e);
+  assert.ok(!(hijack && "ok" in hijack && hijack.ok && hijack.duplicate), "fremde Kennung liefert kein fremdes Ergebnis");
+});
+
+test("Sofort rückgängig: nur eigene Buchungen der letzten 15 Minuten", async () => {
+  const { voidRecent } = await import("../../src/services/movements.ts");
+  const { user, brot, L004 } = d;
+  const r = await bookMovements(user, [{ kind: "RECEIPT", articleId: brot.id, quantity: 3, toLocationId: L004.id }]);
+  assert.ok(r.ok);
+  if (!r.ok) return;
+  const before = await q(brot.id, L004.id, "FULL");
+  const other = await prisma.user.findFirstOrThrow({ where: { email: "dup@x.de" } });
+  assert.equal((await voidRecent(other, r.ids)).ok, false, "fremde Buchung");
+  assert.ok((await voidRecent(user, r.ids)).ok);
+  assert.equal(await q(brot.id, L004.id, "FULL"), before - 3);
+  assert.equal((await voidRecent(user, r.ids)).ok, false, "nur einmal");
+  const old = await bookMovements(user, [{ kind: "RECEIPT", articleId: brot.id, quantity: 1, toLocationId: L004.id }]);
+  if (old.ok) {
+    await prisma.movement.update({ where: { id: old.ids[0] }, data: { createdAt: new Date(Date.now() - 3600_000) } });
+    assert.equal((await voidRecent(user, old.ids)).ok, false, "älter als 15 Minuten");
+  }
+});
+
+test("Inventur: Bewegungen während des Zählens werden herausgerechnet", async () => {
+  const { submitCount } = await import("../../src/services/inventory.ts");
+  const { user, wasser, L004, SH } = d;
+  await bookMovements(user, [{ kind: "ADJUST", articleId: wasser.id, quantity: 20, fromLocationId: L004.id, note: "Vorbereitung" }]);
+  const started = new Date();
+  await new Promise((r) => setTimeout(r, 30));
+  // Während jemand zählt (er sieht 20), werden 5 Kisten nach nebenan gebracht
+  assert.ok((await bookMovements(user, [{ kind: "TRANSFER", articleId: wasser.id, quantity: 5, fromLocationId: L004.id, toLocationId: SH.id }])).ok);
+  // Gezählt wurde der Stand zu Beginn: 20. Es darf KEINE Differenz entstehen (5 sind ja bewusst weg).
+  const r = await submitCount(user, L004.id, [{ articleId: wasser.id, state: "FULL", counted: 20 }], "", started);
+  assert.ok(r.ok);
+  assert.equal(r.ok && r.changed, 0, "keine falsche Differenz");
+  assert.equal(await q(wasser.id, L004.id, "FULL"), 15);
+  // Ohne Startzeit würde dieselbe Zählung fälschlich +5 buchen
+  const naive = await submitCount(user, L004.id, [{ articleId: wasser.id, state: "FULL", counted: 20 }], "");
+  assert.ok(naive.ok && naive.changed === 1);
+  assert.equal(await q(wasser.id, L004.id, "FULL"), 20);
+});
+
+test("Inventur: einzelne Zeilen lassen sich zurücknehmen", async () => {
+  const { submitCount, listInventories } = await import("../../src/services/inventory.ts");
+  const { user, wasser, brot, L004 } = d;
+  const w = await q(wasser.id, L004.id, "FULL");
+  const b = await q(brot.id, L004.id, "FULL");
+  const r = await submitCount(user, L004.id, [{ articleId: wasser.id, state: "FULL", counted: w + 2 }, { articleId: brot.id, state: "FULL", counted: b + 3 }], "zwei Zeilen");
+  assert.ok(r.ok && r.batchId);
+  if (!r.ok || !r.batchId) return;
+  const run = (await listInventories(L004.id)).find((x) => x.batchId === r.batchId)!;
+  assert.equal(run.lines.length, 2);
+  const line = run.lines.find((l) => l.text.startsWith("Brötchen"))!;
+  assert.ok((await voidMovement(user, line.id, "Brötchen falsch gezählt")).ok);
+  assert.equal(await q(brot.id, L004.id, "FULL"), b);
+  assert.equal(await q(wasser.id, L004.id, "FULL"), w + 2, "andere Zeile bleibt");
+  const after = (await listInventories(L004.id)).find((x) => x.batchId === r.batchId)!;
+  assert.equal(after.voided, false);
+  assert.deepEqual(after.lines.map((l) => l.voided).sort(), [false, true]);
+});

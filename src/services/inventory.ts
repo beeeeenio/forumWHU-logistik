@@ -2,7 +2,7 @@ import "server-only";
 import { prisma } from "@/db/prisma";
 import type { User } from "@/generated/prisma/client";
 import type { StockState } from "@/lib/domain/rules";
-import { MAX_QUANTITY, STATE_LABEL } from "@/lib/domain/rules";
+import { MAX_QUANTITY, STATE_LABEL, movementDeltas } from "@/lib/domain/rules";
 import { fmtDate } from "@/lib/time";
 import { audit } from "./audit";
 import { bookMovements, type BookInput } from "./movements";
@@ -16,8 +16,12 @@ export type InventoryResult =
 /**
  * Inventur eines Ortes: gezählte Mengen → nur die Abweichungen werden als Korrekturen gebucht, alle in EINER Transaktion
  * (entweder die ganze Zählung oder nichts). Zeilen, die stimmen, bleiben unberührt.
+ *
+ * `startedAt` = Beginn der Zählung. Wurde währenddessen am selben Ort umgelagert, verbraucht oder eingelagert, wird das herausgerechnet:
+ * Gezählt wurde der Stand zum Zählbeginn, gebucht wird „gezählt + Bewegungen seitdem“. So erzeugt eine Zählung, die lange dauert,
+ * keine falschen Differenzen.
  */
-export async function submitCount(user: User, locationId: string, rows: CountRow[], note: string): Promise<InventoryResult> {
+export async function submitCount(user: User, locationId: string, rows: CountRow[], note: string, startedAt: Date | null = null): Promise<InventoryResult> {
   const loc = await prisma.location.findUnique({ where: { id: locationId } });
   if (!loc || loc.archivedAt) return { ok: false, error: "Dieser Ort existiert nicht mehr oder ist archiviert." };
   if (!rows.length) return { ok: false, error: "Es wurde nichts gezählt." };
@@ -33,6 +37,16 @@ export async function submitCount(user: User, locationId: string, rows: CountRow
     prisma.article.findMany({ where: { id: { in: rows.map((r) => r.articleId) } } }),
   ]);
   const byId = new Map(articles.map((a) => [a.id, a]));
+  // Bewegungen seit Zählbeginn an diesem Ort (ohne Korrekturen): höchstens 12 Stunden zurück, nie aus der Zukunft
+  const now = Date.now();
+  const since = startedAt && startedAt.getTime() <= now && startedAt.getTime() > now - 12 * 3600_000 ? startedAt : null;
+  const drift = new Map<string, number>();
+  if (since) {
+    const moved = await prisma.movement.findMany({
+      where: { createdAt: { gt: since }, voidedAt: null, kind: { not: "ADJUST" }, articleId: { in: rows.map((r) => r.articleId) }, OR: [{ fromLocationId: locationId }, { toLocationId: locationId }] },
+    });
+    for (const m of moved) for (const d of movementDeltas(m)) if (d.locationId === locationId) drift.set(d.articleId + d.state, (drift.get(d.articleId + d.state) ?? 0) + d.quantity);
+  }
   const inputs: BookInput[] = [];
   const lines: string[] = [];
   let same = 0;
@@ -42,10 +56,12 @@ export async function submitCount(user: User, locationId: string, rows: CountRow
     if (!a || a.archivedAt) return { ok: false, error: "Ein Artikel existiert nicht mehr oder ist archiviert." };
     if (r.state === "EMPTY" && !a.returnable) return { ok: false, error: `${a.name} hat kein Leergut.` };
     const current = stock.find((s) => s.articleId === r.articleId && s.state === r.state)?.quantity ?? 0;
-    if (current === r.counted) { same++; continue; }
-    inputs.push({ kind: "ADJUST", articleId: r.articleId, quantity: r.counted, fromLocationId: locationId, state: r.state, note: why, source: "inventory" });
-    const diff = r.counted - current;
-    lines.push(`${a.name}${a.returnable ? (r.state === "FULL" ? " (voll)" : " (leer)") : ""}: ${current} → ${r.counted} (${diff > 0 ? "+" : ""}${diff})`);
+    const moved = drift.get(r.articleId + r.state) ?? 0;
+    const target = Math.max(0, r.counted + moved);
+    if (current === target) { same++; continue; }
+    inputs.push({ kind: "ADJUST", articleId: r.articleId, quantity: target, fromLocationId: locationId, state: r.state, note: why, source: "inventory" });
+    const diff = target - current;
+    lines.push(`${a.name}${a.returnable ? (r.state === "FULL" ? " (voll)" : " (leer)") : ""}: ${current} → ${target} (${diff > 0 ? "+" : ""}${diff})${moved ? ` · inkl. ${moved > 0 ? "+" : ""}${moved} Bewegung seit Zählbeginn` : ""}`);
   }
   if (!inputs.length) return { ok: true, changed: 0, same, lines: [], batchId: null };
   const batchId = crypto.randomUUID();
@@ -61,8 +77,8 @@ export interface InventoryRun {
   by: string;
   locationId: string | null;
   locationName: string;
-  /** „Mineralwasser (voll): +3“ */
-  lines: string[];
+  /** Je Korrektur: Text („Mineralwasser (voll): +3“), ID zum einzelnen Zurücknehmen, ob schon zurückgenommen */
+  lines: { id: string; text: string; voided: boolean }[];
   voided: boolean;
   voidReason: string | null;
   /** Excel-Import statt Zählung */
@@ -84,7 +100,7 @@ export async function listInventories(locationId?: string, take = 40): Promise<I
     const line = `${m.article.name}${m.article.returnable && (m.toState ?? m.fromState) ? ` (${STATE_LABEL[(m.toState ?? m.fromState)!]})` : ""}: ${delta > 0 ? "+" : ""}${delta}`;
     const r = runs.get(m.batchId!) ?? { batchId: m.batchId!, at: m.createdAt, by: m.createdBy.displayName, locationId: loc?.id ?? null, locationName: loc?.name ?? "?", lines: [], voided: true, voidReason: null, imported: m.source === "import" };
     if (r.locationId && loc && loc.id !== r.locationId) { r.locationName = "mehrere Orte"; r.locationId = null; }
-    r.lines.push(line);
+    r.lines.push({ id: m.id, text: line, voided: Boolean(m.voidedAt) });
     if (!m.voidedAt) r.voided = false; else r.voidReason ??= m.voidReason?.replace(/^Zurückgenommen:\s*/, "") ?? null;
     runs.set(m.batchId!, r);
   }
